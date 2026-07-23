@@ -126,7 +126,7 @@ export default function AdminDeliveriesPage() {
   }
 
   return (
-    <div className={`mx-auto flex w-full max-w-[1200px] flex-col gap-8 ${PAGE_X} ${PAGE_Y}`}>
+    <div className={`mx-auto flex w-full max-w-[1200px] flex-col gap-6 ${PAGE_X} ${PAGE_Y}`}>
       {/* Header (sticky) */}
       <div className={`flex flex-wrap items-center gap-3 sm:gap-4 ${STICKY_HEADER}`}>
         <h1 className="flex-1 text-2xl font-bold text-text-primary sm:text-3xl">

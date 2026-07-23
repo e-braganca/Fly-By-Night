@@ -78,7 +78,7 @@ export default function DeliveriesPage() {
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[1200px] flex-col">
+    <div className="mx-auto flex h-full w-full max-w-[1200px] flex-col gap-6">
       {/* Fixed header */}
       <div className={`flex flex-wrap items-center gap-3 pb-4 pt-4 sm:gap-4 lg:pt-6 ${PAGE_X}`}>
         <h1 className="flex-1 text-2xl font-bold text-text-primary sm:text-3xl">

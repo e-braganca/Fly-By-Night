@@ -68,7 +68,7 @@ export default function EquipmentsPage() {
   }
 
   return (
-    <PageContainer gap={32}>
+    <PageContainer>
       {/* Header */}
       <PageHeader title="Equipment">
         <SearchInput
