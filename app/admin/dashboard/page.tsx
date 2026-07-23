@@ -112,15 +112,20 @@ export default function AdminDashboard() {
     setBoard((cols) => {
       const next = cols.map((c) => ({ ...c, deliveries: [...c.deliveries] }));
 
-      let target: { ci: number; di: number } | null = null; // d's slot
-      let current: { ci: number; di: number } | null = null; // old next's slot
-      next.forEach((c, ci) =>
-        c.deliveries.forEach((x, di) => {
-          if (x?.id === d.id) target = { ci, di };
-          else if (x?.status === "Next") current = { ci, di };
-        }),
-      );
+      // Locate a slot (column + slot index) by predicate. Returning a typed
+      // value keeps `target`/`current` narrowable (a `let` assigned only inside
+      // a closure collapses to `never` under strict control-flow analysis).
+      const locate = (pred: (x: AdminDelivery | null) => boolean) => {
+        for (let ci = 0; ci < next.length; ci++) {
+          const di = next[ci].deliveries.findIndex(pred);
+          if (di !== -1) return { ci, di };
+        }
+        return null;
+      };
+
+      const target = locate((x) => x?.id === d.id); // d's slot
       if (!target) return next;
+      const current = locate((x) => x?.status === "Next"); // old next's slot
 
       const promoted: AdminDelivery = { ...d, status: "Next" };
 
