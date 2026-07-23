@@ -252,15 +252,17 @@ export function ScheduleWizard({
   if (!done && isSummary && tier && dateISO) {
     const UrgencyIcon = URGENCY_ICON[URGENCY_OPTIONS[tier].icon];
     return (
-      <div className="min-h-screen bg-primary text-white">
-        <div className="mx-auto flex min-h-screen w-full max-w-[600px] flex-col gap-6 px-5 py-10 sm:px-8">
-          <div className="flex flex-col items-center pt-2 text-center">
+      <div className="h-screen overflow-hidden bg-primary text-white">
+        <div className="mx-auto flex h-full w-full max-w-[600px] flex-col px-5 py-8 sm:px-8">
+          <div className="flex flex-none flex-col items-center pt-2 text-center">
             <span className="grid h-16 w-16 place-items-center rounded-full ring-2 ring-white/40">
               <Image src="/brand/emblem.svg" alt="" width={40} height={40} />
             </span>
             <h1 className="mt-4 text-[32px] font-bold">Request Summary</h1>
           </div>
 
+          {/* Scrollable body — keeps the footer pinned on screen at any height */}
+          <div className="mt-6 flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-1">
           {customer && (
             <div>
               <p className="text-sm text-white/70">Customer</p>
@@ -305,7 +307,7 @@ export function ScheduleWizard({
               <span>Gallons max.</span>
               <span>Fuel Type</span>
             </div>
-            <div className="max-h-64 overflow-y-auto">
+            <div>
               {chosen.map(({ e, count }, i) => (
                 <div
                   key={e.id}
@@ -344,13 +346,15 @@ export function ScheduleWizard({
             </button>
           </div>
 
-          <div className="mt-auto flex gap-2 pt-2">
+          </div>
+
+          <div className="flex flex-none gap-2 pt-4">
             <button
               aria-label="Back"
               onClick={() => setPos(steps.length - 1)}
-              className="grid h-12 w-14 place-items-center rounded-lg bg-white/16 text-white transition-colors hover:bg-white/24"
+              className="grid h-10 w-12 shrink-0 place-items-center rounded-lg bg-white/16 text-white transition-colors hover:bg-white/24"
             >
-              <ArrowRightIcon size={22} className="rotate-180" />
+              <ArrowRightIcon size={20} className="rotate-180" />
             </button>
             <Button variant="soft" size="lg" className="!bg-white/16 !text-white" onClick={() => router.push(cancelHref)}>
               Cancel

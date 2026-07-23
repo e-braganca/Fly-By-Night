@@ -46,9 +46,9 @@ export function WizardFooter({
       <button
         aria-label="Back"
         onClick={onBack}
-        className="grid h-12 w-14 place-items-center rounded-lg bg-grey-500/8 text-text-primary transition-colors hover:bg-grey-500/16"
+        className="grid h-10 w-12 shrink-0 place-items-center rounded-lg bg-grey-500/8 text-text-primary transition-colors hover:bg-grey-500/16"
       >
-        <ChevronLeftIcon size={22} />
+        <ChevronLeftIcon size={20} />
       </button>
       <Button variant="soft" size="lg" onClick={onCancel}>
         Cancel
