@@ -1,26 +1,82 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+  Fly by Night Fuel — design tokens
+  Source of truth: fly-by-night-branding.md + Figma "Punchline Petroleum Design System".
+  Font: brand spec uses "Author" (commercial); substituted with Inter until licensed files are provided.
+*/
+
+@theme {
+  /* ---- Brand: Midnight Blue (primary) ---- */
+  --color-primary-lighter: #d5ddf6;
+  --color-primary-light: #819ae4;
+  --color-primary: #3960d5;
+  --color-primary-dark: #1f3d93;
+  --color-primary-darker: #122354;
+  --color-primary-contrast: #ffffff;
+
+  /* ---- Brand: Pump Gold (secondary / accent) ---- */
+  --color-secondary-lighter: #faf4e4;
+  --color-secondary-light: #f9de94;
+  --color-secondary: #f8c94a;
+  --color-secondary-dark: #785616;
+  --color-secondary-darker: #2b1f08;
+
+  /* ---- Neutrals ---- */
+  --color-ink: #161c24;
+  --color-cream: #faf4e4;
+
+  /* ---- Grey ramp ---- */
+  --color-grey-100: #f9fafb;
+  --color-grey-200: #f4f6f8;
+  --color-grey-300: #dfe3e8;
+  --color-grey-400: #c4cdd5;
+  --color-grey-500: #919eab;
+  --color-grey-600: #637381;
+  --color-grey-700: #454f5b;
+  --color-grey-800: #212b36;
+  --color-grey-900: #161c24;
+
+  /* ---- Functional ---- */
+  --color-info: #00b8d9;
+  --color-success: #1cbf6b;
+  --color-success-dark: #0e8962;
+  --color-warning: #ffab00;
+  --color-warning-dark: #b76e00;
+  --color-error: #ff5630;
+  --color-error-dark: #b71d18;
+
+  /* ---- Semantic surfaces & text ---- */
+  --color-background: #ffffff;
+  --color-paper: #ffffff;
+  --color-neutral: #f4f6f8;
+  --color-text-primary: #212b36;
+  --color-text-secondary: #637381;
+  --color-text-disabled: #919eab;
+  --color-divider: rgba(145, 158, 171, 0.2);
+
+  /* ---- Radius ---- */
+  --radius-card: 16px;
+  --radius-btn: 8px;
+
+  /* ---- Font ---- */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* ---- Shadows (Minimal-style) ---- */
+  --shadow-card: 0 0 2px 0 rgba(145, 158, 171, 0.2), 0 12px 24px -4px rgba(145, 158, 171, 0.12);
+  --shadow-primary: 0 8px 16px 0 rgba(57, 96, 213, 0.24);
+  --shadow-dropdown: 0 0 2px 0 rgba(145, 158, 171, 0.24), -20px 20px 40px -4px rgba(145, 158, 171, 0.24);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-neutral);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
 }

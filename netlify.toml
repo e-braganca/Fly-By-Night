@@ -1,0 +1,11 @@
+# Netlify build config for the Next.js app.
+# The repo root IS this app (git was initialised here), so no base directory
+# is needed. Netlify auto-detects Next.js and installs @netlify/plugin-nextjs
+# to run it on serverless functions — no publish dir needs to be set here.
+
+[build]
+  command = "npm run build"
+
+[build.environment]
+  # Next.js 16 needs Node >= 20.9. Pin a modern LTS to avoid surprises.
+  NODE_VERSION = "22"
