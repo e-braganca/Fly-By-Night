@@ -80,3 +80,15 @@ body {
 * {
   box-sizing: border-box;
 }
+
+/* iOS Safari auto-zooms (and then won't zoom back) when a focused form field
+   has a font-size under 16px. On touch devices, force controls to 16px so the
+   zoom never triggers. Desktop (fine pointer) keeps the compact text-sm sizing.
+   Unlayered so it wins over Tailwind's `text-sm` utility. */
+@media (pointer: coarse), (max-width: 1023px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}

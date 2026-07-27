@@ -95,7 +95,7 @@ export function MobileTopBar({
 export function MobileBottomNav({ items }: { items: MobileNavItem[] }) {
   const pathname = usePathname();
   return (
-    <nav className="flex shrink-0 items-stretch justify-around border-t border-grey-500/16 bg-white pb-[env(safe-area-inset-bottom)] xl:hidden">
+    <nav className="flex shrink-0 items-stretch justify-around bg-primary pb-[env(safe-area-inset-bottom)] xl:hidden">
       {items.map(({ label, href, Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
@@ -104,10 +104,10 @@ export function MobileBottomNav({ items }: { items: MobileNavItem[] }) {
             href={href}
             className="flex flex-1 flex-col items-center gap-1 py-2.5"
           >
-            <Icon size={24} className={active ? "text-primary" : "text-grey-600"} />
+            <Icon size={24} className={active ? "text-white" : "text-white/64"} />
             <span
               className={`text-[11px] ${
-                active ? "font-semibold text-primary" : "text-text-secondary"
+                active ? "font-semibold text-white" : "text-white/64"
               }`}
             >
               {label}
