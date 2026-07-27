@@ -333,15 +333,15 @@ export function CompleteFuelingDrawer({
 
           {/* Pricing row */}
           <div>
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <PriceField
                 label="Fuel Price"
                 value={pricePerGal.toFixed(2)}
                 readOnly
                 warn
-                className="flex-1"
+                className="sm:flex-1"
               />
-              <div className="flex-1">
+              <div className="sm:flex-1">
                 <div className="rounded-lg border border-grey-800 bg-white px-3 py-2">
                   <p className="text-[11px] font-semibold text-text-secondary">Gal. filled</p>
                   <input
@@ -362,7 +362,7 @@ export function CompleteFuelingDrawer({
                 value={money(unitTotal).replace("$", "")}
                 readOnly
                 unit=""
-                className="flex-1"
+                className="sm:flex-1"
               />
             </div>
             <p className="mt-1 flex items-center gap-1 text-[11px] text-text-disabled">
@@ -431,16 +431,17 @@ export function CompleteFuelingDrawer({
           Off-road Diesel
         </span>
 
-        {/* Pricing — Override takes ~40%, the other two split the rest */}
-        <div className="flex gap-3">
-          <PriceField label="Fuel Base Price" value={FUEL_BASE_PRICE.toFixed(2)} readOnly className="flex-1" />
-          <PriceField label="Markup Price" value={FUEL_MARKUP.toFixed(2)} readOnly className="flex-1" />
+        {/* Pricing — stacks on mobile; on sm+ Override takes ~40%, the other
+            two split the rest. */}
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <PriceField label="Fuel Base Price" value={FUEL_BASE_PRICE.toFixed(2)} readOnly className="sm:flex-1" />
+          <PriceField label="Markup Price" value={FUEL_MARKUP.toFixed(2)} readOnly className="sm:flex-1" />
           <PriceField
             label="Override Markup"
             value={override}
             onChange={setOverride}
             helper="Changed on 05/23/26"
-            className="shrink-0 basis-[40%]"
+            className="sm:shrink-0 sm:basis-[40%]"
           />
         </div>
 

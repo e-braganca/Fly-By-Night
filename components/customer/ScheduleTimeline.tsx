@@ -67,7 +67,10 @@ function ListItem({
               {d.gallonsScheduled} Gallons{upcoming ? " Scheduled" : ""}
             </span>
             {upcoming ? (
-              <Badge>Pending Service</Badge>
+              <Badge>
+                <span className="sm:hidden">Pending</span>
+                <span className="hidden sm:inline">Pending Service</span>
+              </Badge>
             ) : (
               <Badge tone="primary" className="!bg-primary !text-white">
                 {d.price}
