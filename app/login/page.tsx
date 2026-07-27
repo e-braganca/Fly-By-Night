@@ -69,11 +69,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-neutral">
+    <div className="relative min-h-dvh overflow-hidden bg-neutral">
       {/* decorative wash */}
       <div className="pointer-events-none absolute -right-40 -top-80 h-[1145px] w-[1145px] rounded-full bg-gradient-to-b from-primary/10 to-transparent" />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[600px] flex-col items-center justify-center px-8 py-12">
+      <div className="relative mx-auto flex min-h-dvh w-full max-w-[600px] flex-col items-center justify-center px-8 py-12">
         <div className="flex w-full flex-col items-center gap-6 rounded-xl px-6 pb-16 pt-12 sm:px-16">
           {/* Logo */}
           <div className="w-full pb-3">

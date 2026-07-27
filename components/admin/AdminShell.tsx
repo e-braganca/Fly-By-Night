@@ -17,7 +17,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const unread = visibleAdminNotifications(readIds).filter((n) => !n.read).length;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-neutral">
+    <div className="flex h-dvh overflow-hidden bg-neutral">
       <AdminSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <MobileTopBar

@@ -219,7 +219,7 @@ export function ScheduleWizard({
   /* ---- Intro (blue, customer mode) ---- */
   if (pos === -1) {
     return (
-      <div className="flex min-h-screen flex-col bg-primary px-6 text-white">
+      <div className="flex min-h-dvh flex-col bg-primary px-6 text-white">
         <div className="flex flex-1 flex-col items-center justify-center text-center">
           <Image src="/brand/emblem.svg" alt="" width={72} height={72} className="mb-6" />
           <h1 className="text-[28px] font-bold">Let&apos;s create your delivery request</h1>
@@ -252,7 +252,7 @@ export function ScheduleWizard({
   if (!done && isSummary && tier && dateISO) {
     const UrgencyIcon = URGENCY_ICON[URGENCY_OPTIONS[tier].icon];
     return (
-      <div className="h-screen overflow-hidden bg-primary text-white">
+      <div className="h-dvh overflow-hidden bg-primary text-white">
         <div className="mx-auto flex h-full w-full max-w-[600px] flex-col px-5 py-8 sm:px-8">
           <div className="flex flex-none flex-col items-center pt-2 text-center">
             <span className="grid h-16 w-16 place-items-center rounded-full ring-2 ring-white/40">
@@ -372,7 +372,7 @@ export function ScheduleWizard({
   /* ---- Confirmation (blue) ---- */
   if (done) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-primary px-6 text-center text-white">
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-primary px-6 text-center text-white">
         <span className="grid h-20 w-20 place-items-center rounded-full bg-white/16">
           <CheckIcon size={40} />
         </span>
@@ -401,7 +401,7 @@ export function ScheduleWizard({
   })();
 
   return (
-    <div className="h-screen overflow-hidden bg-neutral">
+    <div className="h-dvh overflow-hidden bg-neutral">
       <div className="mx-auto flex h-full w-full max-w-[600px] flex-col px-5 py-6 sm:px-8 sm:py-8">
         {/* Fixed header */}
         <div className="flex flex-none flex-col gap-5">
