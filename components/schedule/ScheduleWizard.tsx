@@ -27,6 +27,7 @@ import {
   AlertTriangleIcon,
   UploadIcon,
   TractorIcon,
+  FilePdfIcon,
 } from "@/components/ui/Icon";
 import {
   URGENCY_OPTIONS,
@@ -36,7 +37,7 @@ import {
   parseISO,
   REFERENCE_TODAY,
 } from "@/lib/data/schedule";
-import { useEquipments, useAppStore } from "@/lib/store";
+import { useEquipments, useAppStore, useBusiness } from "@/lib/store";
 import type { Equipment, UrgencyTier } from "@/lib/data/types";
 import type { CustomerAccount } from "@/lib/data/customers";
 
@@ -114,6 +115,8 @@ export function ScheduleWizard({
   const router = useRouter();
   const equipments = useEquipments();
   const addScheduledDelivery = useAppStore((s) => s.addScheduledDelivery);
+  const business = useBusiness();
+  const updateBusiness = useAppStore((s) => s.updateBusiness);
   const certRef = useRef<HTMLInputElement>(null);
 
   // Step sequence + progress grouping (urgency + daytime share the "Schedule" step).
@@ -137,7 +140,7 @@ export function ScheduleWizard({
   const [tier, setTier] = useState<UrgencyTier | null>(null);
   const [dateISO, setDateISO] = useState<string | null>(null);
   const [win, setWin] = useState<DeliveryWindow | null>(null);
-  const [cert, setCert] = useState<string | null>(null);
+  const [cert, setCert] = useState<string | null>(business.dr97 ?? null);
   const [addr, setAddr] = useState<AddressForm>({ ...EMPTY_ADDRESS, ...defaultAddress });
 
   const kind: StepKind | null = pos >= 0 && pos < steps.length ? steps[pos] : null;
@@ -250,7 +253,10 @@ export function ScheduleWizard({
 
   function onPickCert(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) setCert(file.name);
+    if (!file) return;
+    setCert(file.name);
+    // The DR-97 is account-level: uploading here also updates the profile.
+    updateBusiness({ dr97: file.name });
   }
 
   /* ---- Intro (blue, customer mode) ---- */
@@ -364,23 +370,33 @@ export function ScheduleWizard({
           <div>
             <div className="flex items-center justify-between">
               <p className="font-semibold">DR-97 Tax-Exempt Certificate</p>
-              <span className="text-sm text-white/70">Optional</span>
+              <span className="text-sm text-white/70">{cert ? "On file" : "Optional"}</span>
             </div>
             <input ref={certRef} type="file" className="hidden" onChange={onPickCert} />
-            <button
-              onClick={() => certRef.current?.click()}
-              className="mt-2 flex w-full flex-col items-center gap-1 rounded-2xl bg-white/12 py-6 text-sm transition-colors hover:bg-white/16"
-            >
-              <UploadIcon size={22} className="text-white" />
-              {cert ? (
-                <span className="font-semibold">{cert}</span>
-              ) : (
-                <>
-                  <span className="font-semibold">Upload file</span>
-                  <span className="text-xs text-white/70">Click here to upload</span>
-                </>
-              )}
-            </button>
+            {cert ? (
+              <div className="mt-2 flex items-center gap-3 rounded-2xl bg-white/12 p-4">
+                <FilePdfIcon size={28} className="shrink-0 text-white" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{cert}</p>
+                  <p className="text-xs text-white/70">Applies to all your deliveries</p>
+                </div>
+                <button
+                  onClick={() => certRef.current?.click()}
+                  className="shrink-0 text-sm font-semibold text-white underline underline-offset-2"
+                >
+                  Replace
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => certRef.current?.click()}
+                className="mt-2 flex w-full flex-col items-center gap-1 rounded-2xl bg-white/12 py-6 text-sm transition-colors hover:bg-white/16"
+              >
+                <UploadIcon size={22} className="text-white" />
+                <span className="font-semibold">Upload file</span>
+                <span className="text-xs text-white/70">Click here to upload</span>
+              </button>
+            )}
           </div>
 
           </div>

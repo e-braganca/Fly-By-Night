@@ -27,6 +27,8 @@ export const seedBusiness: BusinessInfo = {
   businessName: "MDB Construction, LLC",
   businessType: "Construction",
   taxId: "",
+  // Prototype: assume the customer uploaded their DR-97 in the past.
+  dr97: "dr-97-tax-exempt-certificate.pdf",
 };
 
 /**

@@ -83,6 +83,8 @@ export type BusinessInfo = {
   businessName: string;
   businessType: string;
   taxId: string;
+  /** Uploaded DR-97 tax-exempt certificate filename; applies to all deliveries. */
+  dr97?: string;
 };
 
 export type DeliveryUpdateKey =
