@@ -22,7 +22,6 @@ import {
   FUEL_BASE_PRICE,
   FUEL_MARKUP,
   FUEL_OVERRIDE_DEFAULT,
-  FUEL_CAPACITY,
   FUELING_SEED,
   type FuelingEquipment,
 } from "@/lib/data/admin";
@@ -206,6 +205,12 @@ export function CompleteFuelingDrawer({
     .reduce((s, e) => s + e.units.reduce((t, u) => t + u.gallons, 0), 0);
   const totalCost = delivered * pricePerGal;
   const allDone = equips.length > 0 && equips.every((e) => e.completed);
+  // "up to" = sum of every unit's tank capacity (equipment with no known
+  // capacity contributes nothing).
+  const capacity = equips.reduce(
+    (s, e) => s + (e.maxGallons ? e.maxGallons * e.units.length : 0),
+    0,
+  );
 
   const active = useMemo(
     () => equips.find((e) => e.id === activeId) ?? null,
@@ -497,7 +502,7 @@ export function CompleteFuelingDrawer({
               <span className="font-sans text-[28px] font-bold leading-tight text-primary">
                 {delivered}
               </span>
-              <span className="text-sm font-semibold text-text-primary"> / up to {FUEL_CAPACITY} gal</span>
+              <span className="text-sm font-semibold text-text-primary"> / up to {capacity} gal</span>
             </StatCard>
             <StatCard label="Total Cost">
               <span className="text-primary">
@@ -596,7 +601,7 @@ export function CompleteFuelingDrawer({
             <span className="font-sans text-[28px] font-bold leading-tight text-primary">
               {delivered}
             </span>
-            <span className="text-sm font-semibold text-text-primary"> / up to {FUEL_CAPACITY} gal</span>
+            <span className="text-sm font-semibold text-text-primary"> / up to {capacity} gal</span>
           </StatCard>
           <StatCard label="Total Cost">
             <span className="text-primary">
