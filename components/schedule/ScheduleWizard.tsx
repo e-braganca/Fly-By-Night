@@ -170,6 +170,43 @@ export function ScheduleWizard({
   const set = <K extends keyof AddressForm>(k: K, v: string) =>
     setAddr((a) => ({ ...a, [k]: v }));
 
+  // Auto-fill City / State from a US ZIP via the free Zippopotam.us API
+  // (no key, CORS-enabled). A ZIP maps to city + state only — the street and
+  // house number are still typed by hand. Fails silently to manual entry.
+  const zipReq = useRef(0);
+  const [zipStatus, setZipStatus] = useState<"idle" | "loading" | "error">("idle");
+
+  function onZipChange(raw: string) {
+    const zip = raw.replace(/\D/g, "").slice(0, 5);
+    set("zip", zip);
+    if (zip.length < 5) {
+      setZipStatus("idle");
+      return;
+    }
+    const reqId = ++zipReq.current;
+    setZipStatus("loading");
+    fetch(`https://api.zippopotam.us/us/${zip}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: { places?: { "place name": string; state: string }[] }) => {
+        if (reqId !== zipReq.current) return; // a newer lookup superseded this one
+        const place = data.places?.[0];
+        if (!place) {
+          setZipStatus("error");
+          return;
+        }
+        setAddr((a) => ({
+          ...a,
+          city: place["place name"],
+          state: place.state,
+          country: "United States",
+        }));
+        setZipStatus("idle");
+      })
+      .catch(() => {
+        if (reqId === zipReq.current) setZipStatus("error");
+      });
+  }
+
   function chooseTier(t: UrgencyTier) {
     setTier(t);
     setDateISO(null); // changing urgency invalidates the picked date/window
@@ -477,7 +514,24 @@ export function ScheduleWizard({
 
           {kind === "address" && (
             <div className="flex flex-col gap-4 rounded-2xl bg-white p-6">
-              <TextField id="zip" label="Zip Code" value={addr.zip} onChange={(e) => set("zip", e.target.value)} />
+              <div>
+                <TextField
+                  id="zip"
+                  label="Zip Code"
+                  inputMode="numeric"
+                  placeholder="e.g. 33401"
+                  value={addr.zip}
+                  onChange={(e) => onZipChange(e.target.value)}
+                />
+                {zipStatus === "loading" && (
+                  <p className="mt-1 text-xs text-text-secondary">Looking up city &amp; state…</p>
+                )}
+                {zipStatus === "error" && (
+                  <p className="mt-1 text-xs text-warning-dark">
+                    Couldn&apos;t find that ZIP — enter city &amp; state manually.
+                  </p>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <TextField id="house" label="House Number" value={addr.house} onChange={(e) => set("house", e.target.value)} />
                 <TextField id="street" label="Street Name" value={addr.street} onChange={(e) => set("street", e.target.value)} />
