@@ -9,3 +9,18 @@
 [build.environment]
   # Next.js 16 needs Node >= 20.9. Pin a modern LTS to avoid surprises.
   NODE_VERSION = "22"
+
+# Always revalidate the HTML documents (and non-hashed /public assets) so a new
+# deploy shows up immediately instead of being held in the browser cache. A
+# conditional request returns a fast 304 when nothing changed.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Next.js build output is content-hashed, so it can be cached forever safely.
+# This more specific rule wins over the /* rule above for these paths.
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
