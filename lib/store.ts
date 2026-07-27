@@ -53,6 +53,10 @@ type AppState = {
   /** UI: is the notifications drawer open. */
   notificationsOpen: boolean;
 
+  /** Addresses whose delivery was completed via the admin fueling drawer —
+      lets the deliveries schedule reflect completions made on the dashboard. */
+  fueledAddresses: string[];
+
   /** Settings */
   profile: Profile;
   business: BusinessInfo;
@@ -66,6 +70,7 @@ type AppState = {
   addScheduledDelivery: (data: NewScheduledDelivery) => ScheduledDelivery;
   rescheduleDelivery: (id: string, input: RescheduleInput) => void;
   cancelDelivery: (id: string) => void;
+  markDeliveryFueled: (address: string) => void;
 
   openNotifications: () => void;
   closeNotifications: () => void;
@@ -83,6 +88,7 @@ export const useAppStore = create<AppState>((set) => ({
   scheduledDeliveries: seedScheduledDeliveries,
   readNotifications: [],
   notificationsOpen: false,
+  fueledAddresses: [],
   profile: seedProfile,
   business: seedBusiness,
   notificationPrefs: seedNotificationPrefs,
@@ -132,6 +138,13 @@ export const useAppStore = create<AppState>((set) => ({
       scheduledDeliveries: s.scheduledDeliveries.filter((d) => d.id !== id),
     })),
 
+  markDeliveryFueled: (address) =>
+    set((s) =>
+      s.fueledAddresses.includes(address)
+        ? s
+        : { fueledAddresses: [...s.fueledAddresses, address] },
+    ),
+
   openNotifications: () => set({ notificationsOpen: true }),
   closeNotifications: () => set({ notificationsOpen: false }),
   markNotificationRead: (id) =>
@@ -160,6 +173,7 @@ export const useEquipments = () => useAppStore((s) => s.equipments);
 export const useDeliveries = () => useAppStore((s) => s.deliveries);
 export const useScheduledDeliveries = () =>
   useAppStore((s) => s.scheduledDeliveries);
+export const useFueledAddresses = () => useAppStore((s) => s.fueledAddresses);
 export const useProfile = () => useAppStore((s) => s.profile);
 export const useBusiness = () => useAppStore((s) => s.business);
 export const useNotificationPrefs = () =>

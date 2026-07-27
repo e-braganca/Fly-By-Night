@@ -26,11 +26,13 @@ export const DELIVERY_MONTH = {
 };
 
 /** Delivery counts per day-of-month for the current month (drives the calendar
-    pins). 0 = none. Days before today resolve to completed deliveries. */
+    pins). 0 = none. Deliveries only happen on weekdays, so weekends are 0
+    (July 2026: Sat = 4/11/18/25, Sun = 5/12/19/26). Days before today resolve
+    to completed deliveries. */
 export const DAY_COUNTS: Record<number, number> = {
-  1: 8, 2: 3, 3: 0, 4: 10, 5: 14, 6: 8, 7: 10, 8: 11, 9: 3, 10: 0,
-  11: 8, 12: 13, 13: 12, 14: 8, 15: 9, 16: 4, 17: 0, 18: 11, 19: 13, 20: 8,
-  21: 8, 22: 9, 23: 3, 24: 0, 25: 8, 26: 9, 27: 14, 28: 13, 29: 10, 30: 3, 31: 0,
+  1: 8, 2: 3, 3: 10, 4: 0, 5: 0, 6: 8, 7: 10, 8: 11, 9: 3, 10: 12,
+  11: 0, 12: 0, 13: 13, 14: 8, 15: 9, 16: 4, 17: 11, 18: 0, 19: 0, 20: 8,
+  21: 8, 22: 9, 23: 3, 24: 9, 25: 0, 26: 0, 27: 14, 28: 13, 29: 10, 30: 3, 31: 8,
 };
 
 const LINES: DeliveryEquipmentLine[] = [
@@ -66,6 +68,7 @@ function splitPeriods(count: number): Record<AdminPeriod, number> {
 export function buildDayDeliveries(
   dateISO: string,
   count: number,
+  fueled: string[] = [],
 ): AdminScheduledDelivery[] {
   const isPast = dateISO < REFERENCE_TODAY;
   const isToday = dateISO === REFERENCE_TODAY;
@@ -75,15 +78,17 @@ export function buildDayDeliveries(
   for (const period of ADMIN_PERIODS) {
     for (let k = 0; k < split[period]; k++, i++) {
       const t = TEMPLATES[i % TEMPLATES.length];
-      // Past → every delivery is completed. Today → the first is completed and
-      // the rest are still scheduled. Future → nothing completed yet.
-      const completed = isPast || (isToday && i === 0);
+      const address = `${t.street}, ${t.city}`;
+      // Past → every delivery is completed. Today → the first is completed, plus
+      // any whose fueling was just completed on the dashboard. Future → none.
+      const completed =
+        isPast || (isToday && (i === 0 || fueled.includes(address)));
       rows.push({
         id: `${dateISO}-${i}`,
         dateISO,
         status: completed ? "completed" : "scheduled",
         isEditable: !completed,
-        address: `${t.street}, ${t.city}`,
+        address,
         urgency: "standard",
         gallonsScheduled: 220,
         gallonsDelivered: completed ? 220 : undefined,

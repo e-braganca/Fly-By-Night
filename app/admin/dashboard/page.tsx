@@ -15,6 +15,7 @@ import {
 } from "@/components/admin/AdminDeliveryCard";
 import { CompleteFuelingDrawer } from "@/components/admin/CompleteFuelingDrawer";
 import { PAGE_X, PAGE_Y } from "@/components/ui/layout";
+import { useAppStore } from "@/lib/store";
 import {
   board as seedBoard,
   tomorrowBoard as seedTomorrowBoard,
@@ -30,6 +31,7 @@ import {
 const START_FUELING_STEP = BANNER_STEPS.findIndex((s) => s.key === "on_scene");
 
 export default function AdminDashboard() {
+  const markDeliveryFueled = useAppStore((s) => s.markDeliveryFueled);
   const [step, setStep] = useState(0);
   const [day, setDay] = useState<BoardDay>("today");
   const [boards, setBoards] = useState<Record<BoardDay, BoardColumn[]>>({
@@ -72,6 +74,8 @@ export default function AdminDashboard() {
   // scheduled stop to "Next", and resets the banner to its initial state.
   function completeFueling() {
     setFuelingOpen(false);
+    // Share the completion so the Deliveries Schedule page reflects it too.
+    markDeliveryFueled(nextAddress);
     setBoards((prev) => {
       const today = prev.today.map((c) => ({ ...c, deliveries: [...c.deliveries] }));
       today.forEach((c) =>

@@ -27,6 +27,7 @@ import {
   type AdminScheduledDelivery,
 } from "@/lib/data/adminDeliveries";
 import type { RescheduleInput } from "@/lib/store";
+import { useFueledAddresses } from "@/lib/store";
 
 function shiftISO(iso: string, days: number): string {
   const { y, m, d } = parseISO(iso);
@@ -107,10 +108,11 @@ export default function AdminDeliveriesPage() {
   const [reschedule, setReschedule] = useState<AdminScheduledDelivery | null>(null);
   const [cancelTarget, setCancelTarget] = useState<AdminScheduledDelivery | null>(null);
 
+  const fueledAddresses = useFueledAddresses();
   const day = parseISO(selectedISO).d;
   const all = useMemo(
-    () => buildDayDeliveries(selectedISO, DAY_COUNTS[day] ?? 0),
-    [selectedISO, day],
+    () => buildDayDeliveries(selectedISO, DAY_COUNTS[day] ?? 0, fueledAddresses),
+    [selectedISO, day, fueledAddresses],
   );
 
   const visible = all.filter((d) => !removed.has(d.id));
