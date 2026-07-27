@@ -165,6 +165,7 @@ export function CompleteFuelingDrawer({
   open,
   onClose,
   onComplete,
+  address,
   equipment,
 }: {
   open: boolean;
@@ -178,6 +179,7 @@ export function CompleteFuelingDrawer({
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sel, setSel] = useState(0);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -186,6 +188,7 @@ export function CompleteFuelingDrawer({
       setQuery("");
       setActiveId(null);
       setSel(0);
+      setConfirming(false);
     }
   }, [open, equipment]);
 
@@ -228,6 +231,8 @@ export function CompleteFuelingDrawer({
     const unit = active.units[sel];
     const isLast = sel === active.units.length - 1;
     const unitTotal = pricePerGal * unit.gallons;
+    // Cap gallons at the equipment's tank capacity; unbounded when unknown.
+    const maxGal = active.maxGallons;
 
     return (
       <Drawer
@@ -348,14 +353,16 @@ export function CompleteFuelingDrawer({
                     inputMode="decimal"
                     value={unit.gallons ? String(unit.gallons) : ""}
                     placeholder="0"
-                    onChange={(e) =>
-                      updateUnit({
-                        gallons: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0,
-                      })
-                    }
+                    onChange={(e) => {
+                      const n = Number(e.target.value.replace(/[^0-9.]/g, "")) || 0;
+                      updateUnit({ gallons: maxGal ? Math.min(n, maxGal) : n });
+                    }}
                     className="w-full bg-transparent text-sm text-text-primary outline-none"
                   />
                 </div>
+                {maxGal ? (
+                  <p className="mt-1 text-[11px] text-text-disabled">Max. {maxGal} gal.</p>
+                ) : null}
               </div>
               <PriceField
                 label="Total"
@@ -401,6 +408,93 @@ export function CompleteFuelingDrawer({
     );
   }
 
+  /* ------------------------- confirm (summary) view ------------------------- */
+  if (confirming) {
+    return (
+      <Drawer
+        open={open}
+        onClose={onClose}
+        title="Complete Fueling"
+        headerBorder
+        footer={
+          <div className="flex gap-3">
+            <Button variant="soft" size="lg" onClick={() => setConfirming(false)}>
+              Back
+            </Button>
+            <Button size="lg" className="flex-1" onClick={onComplete}>
+              Complete Fueling
+              <CheckIcon size={20} />
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-5 px-6 py-4">
+          <div className="flex flex-col items-center pt-1 text-center">
+            <span className="grid h-14 w-14 place-items-center rounded-full text-success-dark ring-2 ring-success/40">
+              <CheckIcon size={26} />
+            </span>
+            <h3 className="mt-3 text-xl font-bold text-text-primary">
+              Confirm your fuel delivery
+            </h3>
+          </div>
+
+          {address && (
+            <div>
+              <p className="text-sm text-text-secondary">Delivery address</p>
+              <p className="font-semibold text-text-primary">{address}</p>
+            </div>
+          )}
+
+          <span className="inline-flex w-fit items-center gap-2 rounded-lg bg-grey-800 px-3 py-1.5 text-sm font-medium text-white">
+            <TruckIcon size={18} />
+            Off-road Diesel
+          </span>
+
+          {/* Per-equipment breakdown */}
+          <div>
+            <div className="grid grid-cols-[1.7fr_0.5fr_1fr] gap-2 border-b border-divider pb-2 text-xs text-text-secondary">
+              <span>Equipment</span>
+              <span className="text-center">Units</span>
+              <span className="text-right">Gallons</span>
+            </div>
+            {equips.map((e, i) => (
+              <div
+                key={e.id}
+                className={`grid grid-cols-[1.7fr_0.5fr_1fr] items-center gap-2 rounded-lg px-2 py-2.5 text-sm text-text-primary ${
+                  i % 2 === 1 ? "bg-grey-500/8" : ""
+                }`}
+              >
+                <span className="truncate font-semibold">{e.name}</span>
+                <span className="text-center">{e.units.length}</span>
+                <span className="text-right">
+                  {e.units.reduce((t, u) => t + u.gallons, 0)} gal
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Totals */}
+          <div className="flex gap-3">
+            <StatCard label="Total Delivered">
+              <span className="font-sans text-[28px] font-bold leading-tight text-primary">
+                {delivered}
+              </span>
+              <span className="text-sm font-semibold text-text-primary"> / up to {FUEL_CAPACITY} gal</span>
+            </StatCard>
+            <StatCard label="Total Cost">
+              <span className="text-primary">
+                <span className="align-top text-sm font-semibold">$</span>
+                <span className="font-sans text-[28px] font-bold leading-tight">
+                  {money(totalCost).replace("$", "")}
+                </span>
+              </span>
+            </StatCard>
+          </div>
+        </div>
+      </Drawer>
+    );
+  }
+
   /* ------------------------- list view ------------------------- */
   return (
     <Drawer
@@ -413,7 +507,7 @@ export function CompleteFuelingDrawer({
           <Button variant="soft" size="lg" onClick={onClose}>
             Cancel
           </Button>
-          <Button size="lg" className="flex-1" disabled={!allDone} onClick={onComplete}>
+          <Button size="lg" className="flex-1" disabled={!allDone} onClick={() => setConfirming(true)}>
             Complete Fueling
             <CheckIcon size={20} />
           </Button>

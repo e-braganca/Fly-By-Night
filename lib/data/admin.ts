@@ -53,6 +53,8 @@ export type FuelingEquipment = {
   image?: string;
   /** Equipment-level note, e.g. "Key is on administration building." */
   notes?: string;
+  /** Max tank capacity per unit (gallons). When omitted, any amount is allowed. */
+  maxGallons?: number;
   units: FuelingUnit[];
   /** True once every unit has been fueled. */
   completed: boolean;
@@ -92,6 +94,7 @@ export const FUELING_SEED: FuelingEquipment[] = [
     name: "Wheel Tractor-Scraper",
     image: "/equipments/off-road/excavator.png",
     notes: "Parked by the north gate.",
+    maxGallons: 20,
     units: mkUnits("A", 3, 16),
     completed: false,
   },
@@ -100,13 +103,15 @@ export const FUELING_SEED: FuelingEquipment[] = [
     name: "Compact Track Loader",
     image: "/equipments/off-road/compact-track-loader.png",
     notes: "Key is on administration building.",
-    units: mkUnits("B", 9, 8),
+    maxGallons: 30,
+    units: mkUnits("B", 9, 26),
     completed: false,
   },
   {
     id: "fe3",
     name: "50kw Mobile Silent Diesel Generator",
     image: "/equipments/off-road/generator.png",
+    maxGallons: 55,
     units: mkUnits("C", 1, 30),
     completed: false,
   },

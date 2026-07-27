@@ -23,6 +23,10 @@ function shiftDays(iso: string, days: number): string {
   const dt = new Date(Date.UTC(y, m - 1, d + days));
   return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
 }
+function isSunday(iso: string): boolean {
+  const { y, m, d } = parseISO(iso);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 0;
+}
 
 const LINES: DeliveryEquipmentLine[] = [
   { name: "Wheel Tractor-Scraper", units: 9, gallonsMax: 560, fuelType: "Off-road" },
@@ -111,6 +115,8 @@ export const financeOrders: FinanceOrder[] = (() => {
     });
 
     iso = shiftDays(iso, -(1 + ((i * 7 + 3) % 6))); // step back 1–6 days
+    // Deliveries never land on a Sunday (only rare emergencies) — nudge off it.
+    if (isSunday(iso)) iso = shiftDays(iso, -1);
   }
 
   return out;
