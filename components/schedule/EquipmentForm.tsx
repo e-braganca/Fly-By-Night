@@ -224,7 +224,8 @@ export function EquipmentForm({
         </Button>
         <Button size="lg" className="flex-1" disabled={touched && !valid} onClick={save}>
           <PlusIcon size={18} />
-          Add new equipment
+          <span className="sm:hidden">Add</span>
+          <span className="hidden sm:inline">Add new equipment</span>
         </Button>
       </div>
     </div>
