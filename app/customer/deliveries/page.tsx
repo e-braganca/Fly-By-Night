@@ -78,7 +78,7 @@ export default function DeliveriesPage() {
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[1200px] flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 xl:h-full">
       {/* Fixed header */}
       <div className={`flex flex-wrap items-center gap-3 pb-4 pt-4 sm:gap-4 lg:pt-6 ${PAGE_X}`}>
         <h1 className="flex-1 text-2xl font-bold text-text-primary sm:text-3xl">
@@ -93,7 +93,7 @@ export default function DeliveriesPage() {
       </div>
 
       {/* Body: fixed calendar + scrolling list */}
-      <div className={`grid min-h-0 flex-1 grid-cols-1 gap-6 xl:grid-cols-2 xl:gap-8 ${PAGE_X}`}>
+      <div className={`grid grid-cols-1 gap-6 xl:min-h-0 xl:flex-1 xl:grid-cols-2 xl:gap-8 ${PAGE_X}`}>
         <div className="self-start">
           <DeliveryCalendar
             deliveries={deliveries}
@@ -106,7 +106,7 @@ export default function DeliveriesPage() {
         <div
           ref={listRef}
           onScroll={handleListScroll}
-          className="min-h-0 overflow-y-auto pb-24 pr-1 lg:pb-10"
+          className="pb-24 xl:min-h-0 xl:overflow-y-auto xl:pb-10 xl:pr-1"
         >
           <ScheduleTimeline
             deliveries={deliveries}

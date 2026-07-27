@@ -12,7 +12,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
-import { BellIcon, DropletIcon } from "@/components/ui/Icon";
+import { BellIcon, DropletIcon, LogoutIcon } from "@/components/ui/Icon";
 
 export type MobileNavItem = {
   label: string;
@@ -29,6 +29,7 @@ export function MobileTopBar({
   avatarSrc,
   avatarFallback,
   badge,
+  logoutHref = "/login",
 }: {
   homeHref: string;
   unread: number;
@@ -38,6 +39,7 @@ export function MobileTopBar({
   avatarFallback?: ReactNode;
   /** Optional chip shown next to the brand (e.g. the admin "Admin" pill). */
   badge?: ReactNode;
+  logoutHref?: string;
 }) {
   const avatar = (
     <Avatar
@@ -77,6 +79,13 @@ export function MobileTopBar({
           )}
         </button>
         {profileHref ? <Link href={profileHref}>{avatar}</Link> : avatar}
+        <Link
+          href={logoutHref}
+          aria-label="Log out"
+          className="grid h-10 w-10 place-items-center rounded-full text-grey-600 transition-colors hover:bg-grey-500/16 hover:text-error"
+        >
+          <LogoutIcon size={22} />
+        </Link>
       </div>
     </header>
   );
