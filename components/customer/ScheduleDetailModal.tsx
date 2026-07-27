@@ -44,7 +44,7 @@ export function ScheduleDetailModal({
           <div className="flex items-center gap-2">
             <Button variant="soft" size="sm" onClick={() => onReschedule(delivery)}>
               <CalendarIcon size={18} />
-              Reschedule Service
+              Reschedule
             </Button>
             <Button
               variant="errorSoft"
