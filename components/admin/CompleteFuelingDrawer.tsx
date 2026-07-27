@@ -180,6 +180,7 @@ export function CompleteFuelingDrawer({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sel, setSel] = useState(0);
   const [confirming, setConfirming] = useState(false);
+  const bodyTopRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -191,6 +192,13 @@ export function CompleteFuelingDrawer({
       setConfirming(false);
     }
   }, [open, equipment]);
+
+  // Scroll the drawer body back to the top whenever the unit changes (e.g.
+  // "Next Unit"), so each unit starts from the top.
+  useEffect(() => {
+    const scroller = bodyTopRef.current?.closest(".overflow-y-auto");
+    if (scroller) scroller.scrollTop = 0;
+  }, [activeId, sel]);
 
   const pricePerGal = FUEL_BASE_PRICE + FUEL_MARKUP + (Number(override) || 0);
   const delivered = equips
@@ -220,10 +228,20 @@ export function CompleteFuelingDrawer({
 
   function completeEquipment() {
     setEquips((list) =>
-      list.map((e) => (e.id === activeId ? { ...e, completed: true } : e)),
+      list.map((e) =>
+        e.id === activeId
+          ? { ...e, completed: true, units: e.units.map((u) => ({ ...u, done: true })) }
+          : e,
+      ),
     );
     setActiveId(null);
     setSel(0);
+  }
+
+  // Mark the current unit fueled and advance — its check persists in the pager.
+  function nextUnit() {
+    updateUnit({ done: true });
+    setSel((s) => s + 1);
   }
 
   /* ------------------------- unit (per-unit) view ------------------------- */
@@ -255,7 +273,7 @@ export function CompleteFuelingDrawer({
                 <CheckIcon size={20} />
               </Button>
             ) : (
-              <Button size="lg" className="flex-1" onClick={() => setSel((s) => s + 1)}>
+              <Button size="lg" className="flex-1" onClick={nextUnit}>
                 Next Unit
                 <ArrowRightIcon size={20} />
               </Button>
@@ -263,7 +281,7 @@ export function CompleteFuelingDrawer({
           </div>
         }
       >
-        <div className="flex flex-col gap-4 px-6 py-4">
+        <div ref={bodyTopRef} className="flex flex-col gap-4 px-6 py-4">
           {/* Equipment heading */}
           <div className="flex items-center gap-3">
             <Avatar
@@ -305,13 +323,13 @@ export function CompleteFuelingDrawer({
                     className={`relative grid h-9 w-9 place-items-center rounded-full text-sm font-semibold transition-colors ${
                       tok - 1 === sel
                         ? "bg-primary text-white"
-                        : tok - 1 < sel
+                        : active.units[tok - 1]?.done
                           ? "bg-grey-800 text-white"
                           : "text-text-secondary hover:bg-grey-500/8"
                     }`}
                   >
                     {tok}
-                    {tok - 1 < sel && (
+                    {active.units[tok - 1]?.done && (
                       <span className="absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full bg-primary text-white ring-2 ring-white">
                         <CheckIcon size={10} />
                       </span>

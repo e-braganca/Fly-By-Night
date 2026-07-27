@@ -39,8 +39,10 @@ export type Period = "MORNING" | "AFTERNOON" | "EVENING";
 /* Per-unit fueling record (captured while the operator fills each unit). */
 export type FuelingUnit = {
   unitNumber: string;
-  /** Gallons filled into this unit. */
+  /** Gallons filled into this unit (starts at 0 — the operator enters it). */
   gallons: number;
+  /** True once the operator has moved past this unit / completed it. */
+  done?: boolean;
   note?: string;
   equipmentPhoto?: string;
   odometerPhoto?: string;
@@ -80,10 +82,10 @@ export const FUEL_CAPACITY = 150;
 
 const genUnit = (prefix: string, i: number) => `${prefix}${100000 + i * 1111}`;
 
-function mkUnits(prefix: string, count: number, gallons: number): FuelingUnit[] {
+function mkUnits(prefix: string, count: number): FuelingUnit[] {
   return Array.from({ length: count }, (_, i) => ({
     unitNumber: genUnit(prefix, i),
-    gallons,
+    gallons: 0, // operator fills the real amount during fueling
   }));
 }
 
@@ -95,7 +97,7 @@ export const FUELING_SEED: FuelingEquipment[] = [
     image: "/equipments/off-road/excavator.png",
     notes: "Parked by the north gate.",
     maxGallons: 20,
-    units: mkUnits("A", 3, 16),
+    units: mkUnits("A", 3),
     completed: false,
   },
   {
@@ -104,7 +106,7 @@ export const FUELING_SEED: FuelingEquipment[] = [
     image: "/equipments/off-road/compact-track-loader.png",
     notes: "Key is on administration building.",
     maxGallons: 30,
-    units: mkUnits("B", 9, 26),
+    units: mkUnits("B", 9),
     completed: false,
   },
   {
@@ -112,14 +114,14 @@ export const FUELING_SEED: FuelingEquipment[] = [
     name: "50kw Mobile Silent Diesel Generator",
     image: "/equipments/off-road/generator.png",
     maxGallons: 55,
-    units: mkUnits("C", 1, 30),
+    units: mkUnits("C", 1),
     completed: false,
   },
   {
     id: "fe4",
     name: "Storike Mobile Light Tower",
     image: "/equipments/off-road/light-tower.png",
-    units: mkUnits("D", 2, 15),
+    units: mkUnits("D", 2),
     completed: false,
   },
 ];
