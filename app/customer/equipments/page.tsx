@@ -71,16 +71,18 @@ export default function EquipmentsPage() {
     <PageContainer>
       {/* Header */}
       <PageHeader title="Equipment">
-        <SearchInput
-          value={query}
-          onChange={setQuery}
-          placeholder="Search for an Equipment"
-          className="w-[300px]"
-        />
-        <Button size="md" onClick={openAdd}>
-          <PlusIcon size={20} />
-          New Equipment
-        </Button>
+        <div className="flex w-full items-center gap-3 sm:w-auto">
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search for an Equipment"
+            className="flex-1 sm:w-[300px] sm:flex-none"
+          />
+          <Button size="md" className="shrink-0" onClick={openAdd}>
+            <PlusIcon size={20} />
+            New Equipment
+          </Button>
+        </div>
       </PageHeader>
 
       {/* Address row */}
