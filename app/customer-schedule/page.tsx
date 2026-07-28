@@ -6,7 +6,6 @@ import { formatLongDate } from "@/lib/data/schedule";
 export default function CustomerSchedulePage() {
   return (
     <ScheduleWizard
-      showIntro
       defaultAddress={{
         zip: "33401",
         house: "123",

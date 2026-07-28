@@ -57,6 +57,10 @@ type AppState = {
       lets the deliveries schedule reflect completions made on the dashboard. */
   fueledAddresses: string[];
 
+  /** Whether the customer has accepted the Service Agreement. The first fuel
+      request gates on it; later requests just offer a review. */
+  agreementSigned: boolean;
+
   /** Settings */
   profile: Profile;
   business: BusinessInfo;
@@ -71,6 +75,7 @@ type AppState = {
   rescheduleDelivery: (id: string, input: RescheduleInput) => void;
   cancelDelivery: (id: string) => void;
   markDeliveryFueled: (address: string) => void;
+  signAgreement: () => void;
 
   openNotifications: () => void;
   closeNotifications: () => void;
@@ -89,6 +94,7 @@ export const useAppStore = create<AppState>((set) => ({
   readNotifications: [],
   notificationsOpen: false,
   fueledAddresses: [],
+  agreementSigned: false,
   profile: seedProfile,
   business: seedBusiness,
   notificationPrefs: seedNotificationPrefs,
@@ -145,6 +151,8 @@ export const useAppStore = create<AppState>((set) => ({
         : { fueledAddresses: [...s.fueledAddresses, address] },
     ),
 
+  signAgreement: () => set({ agreementSigned: true }),
+
   openNotifications: () => set({ notificationsOpen: true }),
   closeNotifications: () => set({ notificationsOpen: false }),
   markNotificationRead: (id) =>
@@ -174,6 +182,7 @@ export const useDeliveries = () => useAppStore((s) => s.deliveries);
 export const useScheduledDeliveries = () =>
   useAppStore((s) => s.scheduledDeliveries);
 export const useFueledAddresses = () => useAppStore((s) => s.fueledAddresses);
+export const useAgreementSigned = () => useAppStore((s) => s.agreementSigned);
 export const useProfile = () => useAppStore((s) => s.profile);
 export const useBusiness = () => useAppStore((s) => s.business);
 export const useNotificationPrefs = () =>

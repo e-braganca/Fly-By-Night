@@ -65,6 +65,13 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false);
 
   function login() {
+    // Coming from the landing's "Request Delivery" (?next=schedule) drops the
+    // user straight into the request-fuel wizard; otherwise into the dashboard.
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next === "schedule") {
+      router.push(role === "admin" ? "/admin-schedule" : "/customer-schedule");
+      return;
+    }
     router.push(DEST[role]);
   }
 

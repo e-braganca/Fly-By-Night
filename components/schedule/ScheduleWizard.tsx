@@ -5,14 +5,15 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { TextField, TextAreaField } from "@/components/ui/Field";
 import { EquipmentModal } from "@/components/customer/EquipmentModal";
 import { MiniCalendar } from "@/components/schedule/MiniCalendar";
 import { WindowPicker, type DeliveryWindow } from "@/components/schedule/WindowPicker";
 import { UrgencyPicker } from "@/components/schedule/UrgencyPicker";
-import { WizardProgress, WizardFooter } from "@/components/schedule/WizardChrome";
 import { EquipmentForm } from "@/components/schedule/EquipmentForm";
+import { ServiceAgreement } from "@/components/schedule/ServiceAgreement";
 import {
   EquipmentUnitPicker,
   selectedUnitCount,
@@ -22,12 +23,11 @@ import {
   CheckIcon,
   PlusIcon,
   LocationIcon,
-  CalendarIcon,
-  ClockIcon,
-  AlertTriangleIcon,
   UploadIcon,
   TractorIcon,
   FilePdfIcon,
+  ChevronDownIcon,
+  LockIcon,
 } from "@/components/ui/Icon";
 import {
   URGENCY_OPTIONS,
@@ -37,13 +37,14 @@ import {
   parseISO,
   REFERENCE_TODAY,
 } from "@/lib/data/schedule";
-import { useEquipments, useAppStore, useBusiness } from "@/lib/store";
+import {
+  useEquipments,
+  useAppStore,
+  useBusiness,
+  useAgreementSigned,
+} from "@/lib/store";
 import type { Equipment, UrgencyTier } from "@/lib/data/types";
 import type { CustomerAccount } from "@/lib/data/customers";
-
-const URGENCY_ICON = { calendar: CalendarIcon, clock: ClockIcon, alert: AlertTriangleIcon };
-
-type StepKind = "customer" | "urgency" | "daytime" | "address" | "equipment";
 
 type AddressForm = {
   zip: string;
@@ -81,14 +82,33 @@ function parseAddress(s: string): AddressForm {
   };
 }
 
+/** Section wrapper: numbered-free titled block used down the scrolling page. */
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-4">
+      <div>
+        <h2 className="text-xl font-bold text-text-primary">{title}</h2>
+        {description && <p className="mt-1 text-sm text-text-secondary">{description}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export type ScheduleWizardProps = {
   /** Admin mode: pass the customer directory to enable the customer step. */
   customers?: CustomerAccount[];
-  /** Customer mode: show the blue "Let's create your delivery request" intro. */
-  showIntro?: boolean;
   /** Address prefill (customer/self mode). */
   defaultAddress?: Partial<AddressForm>;
-  /** Where Cancel / backing out of the first step goes. */
+  /** Where Cancel goes. */
   cancelHref: string;
   /** Confirmation screen copy + navigation. */
   doneTitle: string;
@@ -104,7 +124,6 @@ export type ScheduleWizardProps = {
 
 export function ScheduleWizard({
   customers,
-  showIntro = false,
   defaultAddress,
   cancelHref,
   doneTitle,
@@ -117,19 +136,16 @@ export function ScheduleWizard({
   const addScheduledDelivery = useAppStore((s) => s.addScheduledDelivery);
   const business = useBusiness();
   const updateBusiness = useAppStore((s) => s.updateBusiness);
+  const agreementSigned = useAgreementSigned();
+  const signAgreement = useAppStore((s) => s.signAgreement);
   const certRef = useRef<HTMLInputElement>(null);
 
-  // Step sequence + progress grouping (urgency + daytime share the "Schedule" step).
-  const steps: StepKind[] = customers
-    ? ["customer", "urgency", "daytime", "address", "equipment"]
-    : ["urgency", "daytime", "address", "equipment"];
-  const GROUP: Record<StepKind, number> = customers
-    ? { customer: 1, urgency: 2, daytime: 2, address: 3, equipment: 4 }
-    : { customer: 0, urgency: 1, daytime: 1, address: 2, equipment: 3 };
-  const totalSteps = (customers ? 4 : 3) + 1; // + summary
+  const isCustomer = !customers;
+  // Captured once so checking the box doesn't swap the full agreement out mid-flow.
+  const [firstTime] = useState(isCustomer && !agreementSigned);
+  const [accepted, setAccepted] = useState(!isCustomer || agreementSigned);
+  const [reviewing, setReviewing] = useState(false);
 
-  const firstPos = showIntro ? -1 : 0;
-  const [pos, setPos] = useState(firstPos);
   const [done, setDone] = useState(false);
   const [adding, setAdding] = useState(false);
   const [editEquip, setEditEquip] = useState<Equipment | null>(null);
@@ -143,9 +159,7 @@ export function ScheduleWizard({
   const [cert, setCert] = useState<string | null>(business.dr97 ?? null);
   const [addr, setAddr] = useState<AddressForm>({ ...EMPTY_ADDRESS, ...defaultAddress });
 
-  const kind: StepKind | null = pos >= 0 && pos < steps.length ? steps[pos] : null;
-  const isSummary = pos === steps.length;
-  const equipAdding = kind === "equipment" && adding;
+  const gated = isCustomer && !accepted;
 
   const addressLine = `${addr.house} ${addr.street}, ${addr.city}, ${addr.state}`;
   const rule = tier ? URGENCY_SCHEDULE[tier] : null;
@@ -158,24 +172,19 @@ export function ScheduleWizard({
   const addrValid = [addr.house, addr.street, addr.city, addr.state, addr.country].every(
     (v) => v.trim().length > 0,
   );
-
-  function stepValid(k: StepKind): boolean {
-    switch (k) {
-      case "customer": return Boolean(customer);
-      case "urgency": return Boolean(tier);
-      case "daytime": return Boolean(dateISO && win);
-      case "address": return addrValid;
-      case "equipment": return chosen.length > 0;
-    }
-  }
-  const canContinue = kind ? stepValid(kind) : true;
+  const canPlace = Boolean(
+    tier &&
+      dateISO &&
+      win &&
+      addrValid &&
+      chosen.length > 0 &&
+      (isCustomer ? accepted : customer),
+  );
 
   const set = <K extends keyof AddressForm>(k: K, v: string) =>
     setAddr((a) => ({ ...a, [k]: v }));
 
-  // Auto-fill City / State from a US ZIP via the free Zippopotam.us API
-  // (no key, CORS-enabled). A ZIP maps to city + state only — the street and
-  // house number are still typed by hand. Fails silently to manual entry.
+  // Auto-fill City / State from a US ZIP via the free Zippopotam.us API.
   const zipReq = useRef(0);
   const [zipStatus, setZipStatus] = useState<"idle" | "loading" | "error">("idle");
 
@@ -191,18 +200,13 @@ export function ScheduleWizard({
     fetch(`https://api.zippopotam.us/us/${zip}`)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then((data: { places?: { "place name": string; state: string }[] }) => {
-        if (reqId !== zipReq.current) return; // a newer lookup superseded this one
+        if (reqId !== zipReq.current) return;
         const place = data.places?.[0];
         if (!place) {
           setZipStatus("error");
           return;
         }
-        setAddr((a) => ({
-          ...a,
-          city: place["place name"],
-          state: place.state,
-          country: "United States",
-        }));
+        setAddr((a) => ({ ...a, city: place["place name"], state: place.state, country: "United States" }));
         setZipStatus("idle");
       })
       .catch(() => {
@@ -212,13 +216,25 @@ export function ScheduleWizard({
 
   function chooseTier(t: UrgencyTier) {
     setTier(t);
-    setDateISO(null); // changing urgency invalidates the picked date/window
+    setDateISO(null);
     setWin(null);
   }
 
   function chooseCustomer(c: CustomerAccount | null) {
     setCustomer(c);
-    if (c) setAddr(parseAddress(c.address)); // prefill delivery location
+    if (c) setAddr(parseAddress(c.address));
+  }
+
+  function acceptAgreement(v: boolean) {
+    setAccepted(v);
+    if (v) signAgreement();
+  }
+
+  function onPickCert(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCert(file.name);
+    updateBusiness({ dr97: file.name });
   }
 
   function finish() {
@@ -237,189 +253,11 @@ export function ScheduleWizard({
         fuelType: e.classification,
       })),
       notes: addr.notes.trim() || undefined,
-      documents: cert ? [{ label: "DR-97 Tax-Exempt Certificate", filename: cert, url: "#" }] : undefined,
+      documents: cert
+        ? [{ label: "DR-97 Tax-Exempt Certificate", filename: cert, url: "#" }]
+        : undefined,
     });
     setDone(true);
-  }
-
-  function next() {
-    if (isSummary) finish();
-    else setPos((p) => p + 1);
-  }
-  function back() {
-    if (pos <= firstPos) router.push(cancelHref);
-    else setPos((p) => p - 1);
-  }
-
-  function onPickCert(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setCert(file.name);
-    // The DR-97 is account-level: uploading here also updates the profile.
-    updateBusiness({ dr97: file.name });
-  }
-
-  /* ---- Intro (blue, customer mode) ---- */
-  if (pos === -1) {
-    return (
-      <div className="flex min-h-dvh flex-col bg-primary px-6 text-white">
-        <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <Image src="/brand/emblem.svg" alt="" width={72} height={72} className="mb-6" />
-          <h1 className="text-[28px] font-bold">Let&apos;s create your delivery request</h1>
-          <p className="mt-3 text-white/80">To proceed you will need to provide information about your:</p>
-          <ul className="mt-6 flex flex-col gap-3 text-left">
-            {["Schedule", "Delivery Location", "Equipment"].map((s) => (
-              <li key={s} className="flex items-center gap-2 font-semibold">
-                <span className="grid h-5 w-5 place-items-center rounded-full bg-white text-primary">
-                  <CheckIcon size={14} />
-                </span>
-                {s}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="mx-auto flex w-full max-w-[600px] gap-3 py-8">
-          <Button variant="soft" size="lg" className="!bg-white/16 !text-white" onClick={() => router.push(cancelHref)}>
-            Cancel
-          </Button>
-          <Button size="lg" className="flex-1 !bg-white !text-primary !shadow-none" onClick={next}>
-            Continue
-            <ArrowRightIcon size={20} />
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  /* ---- Request Summary (blue) ---- */
-  if (!done && isSummary && tier && dateISO) {
-    const UrgencyIcon = URGENCY_ICON[URGENCY_OPTIONS[tier].icon];
-    return (
-      <div className="h-dvh overflow-hidden bg-primary text-white">
-        <div className="mx-auto flex h-full w-full max-w-[600px] flex-col px-5 py-8 sm:px-8">
-          <div className="flex flex-none flex-col items-center pt-2 text-center">
-            <span className="grid h-16 w-16 place-items-center rounded-full ring-2 ring-white/40">
-              <Image src="/brand/emblem.svg" alt="" width={40} height={40} />
-            </span>
-            <h1 className="mt-4 text-[32px] font-bold">Request Summary</h1>
-          </div>
-
-          {/* Scrollable body — keeps the footer pinned on screen at any height */}
-          <div className="mt-6 flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-1">
-          {customer && (
-            <div>
-              <p className="text-sm text-white/70">Customer</p>
-              <div className="mt-1 flex items-center gap-3">
-                {customer.logo && (
-                  <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg bg-white">
-                    <Image src={customer.logo} alt="" width={32} height={32} className="h-8 w-8 object-contain" />
-                  </span>
-                )}
-                <p className="font-semibold">{customer.name}</p>
-              </div>
-            </div>
-          )}
-          <div>
-            <p className="text-sm text-white/70">Delivery address</p>
-            <p className="font-semibold">{addressLine}</p>
-          </div>
-          <div>
-            <p className="text-sm text-white/70">Scheduled for</p>
-            <p className="font-semibold">{formatLongDate(dateISO)} · {win}</p>
-          </div>
-
-          <div>
-            <p className="mb-2 text-sm text-white/70">Delivery urgency</p>
-            <div className="flex items-center gap-3 rounded-2xl bg-white/12 p-4">
-              <UrgencyIcon size={22} className="shrink-0 text-white" />
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold">{URGENCY_OPTIONS[tier].title}</p>
-                <p className="truncate text-sm text-white/70">{URGENCY_OPTIONS[tier].description}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-white/70">fee</p>
-                <p className="font-semibold">{feeLabel(URGENCY_OPTIONS[tier].fee)}</p>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <div className="grid grid-cols-[1.6fr_0.6fr_1fr_0.9fr] gap-2 border-b border-white/16 pb-2 text-xs text-white/70">
-              <span>Equipment</span>
-              <span>Units</span>
-              <span>Gallons max.</span>
-              <span>Fuel Type</span>
-            </div>
-            <div>
-              {chosen.map(({ e, count }, i) => (
-                <div
-                  key={e.id}
-                  className={`grid grid-cols-[1.6fr_0.6fr_1fr_0.9fr] items-center gap-2 rounded-lg px-2 py-2.5 text-sm ${
-                    i % 2 === 1 ? "bg-white/8" : ""
-                  }`}
-                >
-                  <span className="truncate font-semibold">{e.name}</span>
-                  <span>{count}</span>
-                  <span className="text-white/80">{e.maxTankCapacity} gal. max.</span>
-                  <span className="text-white/80">{e.classification}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between">
-              <p className="font-semibold">DR-97 Tax-Exempt Certificate</p>
-              <span className="text-sm text-white/70">{cert ? "On file" : "Optional"}</span>
-            </div>
-            <input ref={certRef} type="file" className="hidden" onChange={onPickCert} />
-            {cert ? (
-              <div className="mt-2 flex items-center gap-3 rounded-2xl bg-white/12 p-4">
-                <FilePdfIcon size={28} className="shrink-0 text-white" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{cert}</p>
-                  <p className="text-xs text-white/70">Applies to all your deliveries</p>
-                </div>
-                <button
-                  onClick={() => certRef.current?.click()}
-                  className="shrink-0 text-sm font-semibold text-white underline underline-offset-2"
-                >
-                  Replace
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => certRef.current?.click()}
-                className="mt-2 flex w-full flex-col items-center gap-1 rounded-2xl bg-white/12 py-6 text-sm transition-colors hover:bg-white/16"
-              >
-                <UploadIcon size={22} className="text-white" />
-                <span className="font-semibold">Upload file</span>
-                <span className="text-xs text-white/70">Click here to upload</span>
-              </button>
-            )}
-          </div>
-
-          </div>
-
-          <div className="flex flex-none gap-2 pt-4">
-            <button
-              aria-label="Back"
-              onClick={() => setPos(steps.length - 1)}
-              className="grid h-10 w-12 shrink-0 place-items-center rounded-lg bg-white/16 text-white transition-colors hover:bg-white/24"
-            >
-              <ArrowRightIcon size={20} className="rotate-180" />
-            </button>
-            <Button variant="soft" size="lg" className="!bg-white/16 !text-white" onClick={() => router.push(cancelHref)}>
-              Cancel
-            </Button>
-            <Button size="lg" className="flex-1 !bg-white !text-primary !shadow-none" onClick={finish}>
-              Place Order
-              <ArrowRightIcon size={20} />
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
   }
 
   /* ---- Confirmation (blue) ---- */
@@ -454,178 +292,288 @@ export function ScheduleWizard({
   })();
 
   return (
-    <div className="h-dvh overflow-hidden bg-neutral">
-      <div className="mx-auto flex h-full w-full max-w-[600px] flex-col px-5 py-6 sm:px-8 sm:py-8">
-        {/* Fixed header */}
-        <div className="flex flex-none flex-col gap-5">
-          <WizardProgress step={kind ? GROUP[kind] : totalSteps} total={totalSteps} />
-          <div>
-            <h1 className="text-[32px] font-semibold leading-tight text-text-primary">
-              {kind === "customer" && "Who is the customer?"}
-              {kind === "urgency" && "How urgent is the delivery?"}
-              {kind === "daytime" && "When do you want the delivery?"}
-              {kind === "address" && "Fuel Delivery Location"}
-              {kind === "equipment" && (adding ? "Add an equipment" : "Your Equipment")}
-            </h1>
-            <p className="mt-1 text-base text-text-secondary">
-              {kind === "customer" && "Please select one of the customers to proceed."}
-              {kind === "urgency" && "Please select how urgent is this fuel delivery."}
-              {kind === "daytime" && "Select the date and time slot for the delivery."}
-              {kind === "address" && "Please provide the address for fuel delivery before adding vehicles."}
-              {kind === "equipment" && (adding ? "Provide the equipment details and its units." : "Please add and select the equipment you plan to fuel.")}
-            </p>
-          </div>
+    <div className="min-h-dvh bg-neutral">
+      <div className="mx-auto w-full max-w-[640px] px-5 pb-16 pt-8 sm:px-8">
+        {/* Header */}
+        <div className="flex flex-col items-center text-center">
+          <Image src="/brand/logo-horizontal.svg" alt="Fly by Night Fuel" width={180} height={48} priority className="h-11 w-auto" />
+          <h1 className="mt-5 text-[26px] font-bold text-text-primary">Request a delivery</h1>
+          <p className="mt-1 text-sm text-text-secondary">
+            Fill in the details below to schedule your fuel delivery.
+          </p>
         </div>
 
-        {/* Scrolling body */}
-        <div className="mt-6 min-h-0 flex-1 overflow-y-auto pr-1">
-          {kind === "customer" && (
-            <div className="flex flex-col gap-4 rounded-2xl bg-white p-6">
-              <SearchInput value={query} onChange={setQuery} placeholder="Search..." />
-              <div className="flex flex-col gap-4">
-                {filteredCustomers.map((c) => {
-                  const selected = customer?.id === c.id;
-                  return (
-                    <div key={c.id} className="flex items-center gap-3">
-                      {c.logo ? (
-                        <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-white ring-1 ring-grey-200">
-                          <Image src={c.logo} alt="" width={38} height={38} className="h-9 w-9 object-contain" />
-                        </span>
-                      ) : (
-                        <Avatar size={40} fallback={<TractorIcon size={20} className="text-grey-500" />} />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-text-primary">{c.name}</p>
-                        <p className="truncate text-xs text-text-secondary">{c.address}</p>
+        <div className="mt-8 flex flex-col gap-8">
+          {/* Customer selection (admin) */}
+          {customers && (
+            <Section title="Who is the customer?" description="Select the customer this delivery is for.">
+              <div className="flex flex-col gap-4 rounded-2xl bg-white p-5">
+                <SearchInput value={query} onChange={setQuery} placeholder="Search customers…" />
+                <div className="flex flex-col gap-4">
+                  {filteredCustomers.map((c) => {
+                    const selected = customer?.id === c.id;
+                    return (
+                      <div key={c.id} className="flex items-center gap-3">
+                        {c.logo ? (
+                          <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-white ring-1 ring-grey-200">
+                            <Image src={c.logo} alt="" width={38} height={38} className="h-9 w-9 object-contain" />
+                          </span>
+                        ) : (
+                          <Avatar size={40} fallback={<TractorIcon size={20} className="text-grey-500" />} />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-text-primary">{c.name}</p>
+                          <p className="truncate text-xs text-text-secondary">{c.address}</p>
+                        </div>
+                        <Button
+                          variant={selected ? "primary" : "soft"}
+                          size="sm"
+                          className={selected ? "" : "!bg-primary/8 !text-primary-dark"}
+                          onClick={() => chooseCustomer(selected ? null : c)}
+                        >
+                          {selected ? "Unselect" : "Select"}
+                        </Button>
                       </div>
-                      <Button
-                        variant={selected ? "primary" : "soft"}
-                        size="sm"
-                        className={selected ? "" : "!bg-primary/8 !text-primary-dark"}
-                        onClick={() => chooseCustomer(selected ? null : c)}
-                      >
-                        {selected ? "Unselect" : "Select"}
-                      </Button>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            </Section>
           )}
 
-          {kind === "urgency" && <UrgencyPicker value={tier} onChange={chooseTier} />}
-
-          {kind === "daytime" && (
-            <div className="flex flex-col gap-5">
-              <MiniCalendar
-                selectedISO={dateISO}
-                onSelect={setDateISO}
-                initialView={{ y: refMonth.y, m: refMonth.m }}
-                minISO={REFERENCE_TODAY}
-                isEnabled={rule?.allowsDay}
-              />
-              <WindowPicker value={win} onChange={setWin} enabled={rule?.windows} />
-            </div>
-          )}
-
-          {kind === "address" && (
-            <div className="flex flex-col gap-4 rounded-2xl bg-white p-6">
-              <div>
-                <TextField
-                  id="zip"
-                  label="Zip Code"
-                  inputMode="numeric"
-                  placeholder="e.g. 33401"
-                  value={addr.zip}
-                  onChange={(e) => onZipChange(e.target.value)}
-                />
-                {zipStatus === "loading" && (
-                  <p className="mt-1 text-xs text-text-secondary">Looking up city &amp; state…</p>
-                )}
-                {zipStatus === "error" && (
-                  <p className="mt-1 text-xs text-warning-dark">
-                    Couldn&apos;t find that ZIP — enter city &amp; state manually.
-                  </p>
-                )}
+          {/* Service Agreement — first time: full + gate; returning: review box */}
+          {isCustomer && firstTime && (
+            <Section
+              title="Service Agreement & Terms"
+              description="Please review and accept the agreement before requesting a delivery."
+            >
+              <div className="rounded-2xl bg-white p-5 shadow-[var(--shadow-card)]">
+                <div className="max-h-[380px] overflow-y-auto rounded-xl border border-grey-500/16 p-4">
+                  <ServiceAgreement />
+                </div>
+                <label className="mt-4 flex cursor-pointer items-start gap-3">
+                  <span className="pt-0.5">
+                    <Checkbox checked={accepted} onChange={acceptAgreement} aria-label="Accept the Service Agreement" />
+                  </span>
+                  <span className="text-sm text-text-primary">
+                    I have read and agree to the{" "}
+                    <span className="font-semibold">Service Agreement, Terms &amp; Conditions</span>, and I am
+                    authorized to bind the customer. No delivery is made until this is accepted.
+                  </span>
+                </label>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <TextField id="house" label="House Number" value={addr.house} onChange={(e) => set("house", e.target.value)} />
-                <TextField id="street" label="Street Name" value={addr.street} onChange={(e) => set("street", e.target.value)} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <TextField id="city" label="City" value={addr.city} onChange={(e) => set("city", e.target.value)} />
-                <TextField id="state" label="State" value={addr.state} onChange={(e) => set("state", e.target.value)} />
-              </div>
-              <TextField id="country" label="Country" value={addr.country} onChange={(e) => set("country", e.target.value)} />
-              <TextAreaField
-                id="notes"
-                label="Access Notes"
-                placeholder="Please also provide information on how to access the equipments."
-                value={addr.notes}
-                onChange={(e) => set("notes", e.target.value)}
-              />
-            </div>
+            </Section>
           )}
-
-          {kind === "equipment" && adding && (
-            <EquipmentForm
-              location={addressLine}
-              onSaved={() => setAdding(false)}
-              onCancel={() => setAdding(false)}
-            />
-          )}
-
-          {kind === "equipment" && !adding && (
-            <div className="flex flex-col gap-4">
-              {equipments.length === 0 ? (
+          {isCustomer && !firstTime && (
+            <div className="rounded-2xl bg-white p-4 shadow-[var(--shadow-card)]">
+              <div className="flex items-center gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-success/16 text-success-dark">
+                  <CheckIcon size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-text-primary">Service Agreement accepted</p>
+                  <p className="text-xs text-text-secondary">Applies to all your deliveries.</p>
+                </div>
                 <button
-                  onClick={() => setAdding(true)}
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-grey-500/8 py-6 text-sm font-semibold text-text-secondary transition-colors hover:bg-grey-500/16"
+                  onClick={() => setReviewing((r) => !r)}
+                  className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-semibold text-primary hover:bg-primary/8"
                 >
-                  Add an equipment
-                  <PlusIcon size={18} />
+                  Review
+                  <ChevronDownIcon size={16} className={`transition-transform ${reviewing ? "rotate-180" : ""}`} />
                 </button>
-              ) : (
-                <>
-                  <EquipmentUnitPicker
-                    equipments={equipments}
-                    deselected={deselected}
-                    onChange={setDeselected}
-                    onEdit={(e) => setEditEquip(e)}
-                  />
-                  <button
-                    onClick={() => setAdding(true)}
-                    className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-grey-400 py-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/8"
-                  >
-                    <PlusIcon size={18} />
-                    Add an equipment
-                  </button>
-                </>
+              </div>
+              {reviewing && (
+                <div className="mt-4 max-h-[380px] overflow-y-auto rounded-xl border border-grey-500/16 p-4">
+                  <ServiceAgreement />
+                </div>
               )}
             </div>
           )}
-        </div>
 
-        {/* Fixed bottom: location alert (equipment step) + footer */}
-        <div className="flex flex-none flex-col gap-3 pt-4">
-          {kind === "equipment" && !adding && (
-            <div className="flex items-center gap-2 rounded-xl bg-primary/8 px-3 py-3 text-sm text-primary-darker">
-              <LocationIcon size={18} className="shrink-0 text-primary" />
-              <span>
-                Delivery to <span className="font-semibold">{addressLine}</span>. All equipments should
-                be at the same location.
-              </span>
+          {/* Everything below is gated until the agreement is accepted */}
+          <div
+            className={gated ? "pointer-events-none select-none opacity-40" : ""}
+            aria-disabled={gated}
+          >
+            {gated && (
+              <div className="mb-6 flex items-center gap-2 rounded-xl bg-secondary-lighter px-4 py-3 text-sm font-semibold text-secondary-dark">
+                <LockIcon size={18} className="shrink-0" />
+                Accept the Service Agreement above to continue.
+              </div>
+            )}
+
+            <div className="flex flex-col gap-8">
+              <Section title="How urgent is the delivery?" description="Choose how quickly you need this fuel delivery.">
+                <UrgencyPicker value={tier} onChange={chooseTier} />
+              </Section>
+
+              <Section title="When do you want the delivery?" description="Select the date and time slot for the delivery.">
+                <div className="flex flex-col gap-5">
+                  <MiniCalendar
+                    selectedISO={dateISO}
+                    onSelect={setDateISO}
+                    initialView={{ y: refMonth.y, m: refMonth.m }}
+                    minISO={REFERENCE_TODAY}
+                    isEnabled={rule?.allowsDay}
+                  />
+                  <WindowPicker value={win} onChange={setWin} enabled={rule?.windows} />
+                </div>
+              </Section>
+
+              <Section title="Fuel Delivery Location" description="Where should we deliver the fuel?">
+                <div className="flex flex-col gap-4 rounded-2xl bg-white p-5">
+                  <div>
+                    <TextField
+                      id="zip"
+                      label="Zip Code"
+                      inputMode="numeric"
+                      placeholder="e.g. 33401"
+                      value={addr.zip}
+                      onChange={(e) => onZipChange(e.target.value)}
+                    />
+                    {zipStatus === "loading" && (
+                      <p className="mt-1 text-xs text-text-secondary">Looking up city &amp; state…</p>
+                    )}
+                    {zipStatus === "error" && (
+                      <p className="mt-1 text-xs text-warning-dark">
+                        Couldn&apos;t find that ZIP — enter city &amp; state manually.
+                      </p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <TextField id="house" label="House Number" value={addr.house} onChange={(e) => set("house", e.target.value)} />
+                    <TextField id="street" label="Street Name" value={addr.street} onChange={(e) => set("street", e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <TextField id="city" label="City" value={addr.city} onChange={(e) => set("city", e.target.value)} />
+                    <TextField id="state" label="State" value={addr.state} onChange={(e) => set("state", e.target.value)} />
+                  </div>
+                  <TextField id="country" label="Country" value={addr.country} onChange={(e) => set("country", e.target.value)} />
+                  <TextAreaField
+                    id="notes"
+                    label="Access Notes"
+                    placeholder="Please also provide information on how to access the equipments."
+                    value={addr.notes}
+                    onChange={(e) => set("notes", e.target.value)}
+                  />
+                </div>
+              </Section>
+
+              <Section
+                title="Your Equipment"
+                description={adding ? "Provide the equipment details and its units." : "Add and select the equipment you plan to fuel."}
+              >
+                {adding ? (
+                  <EquipmentForm
+                    location={addressLine}
+                    onSaved={() => setAdding(false)}
+                    onCancel={() => setAdding(false)}
+                  />
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {equipments.length === 0 ? (
+                      <button
+                        onClick={() => setAdding(true)}
+                        className="flex items-center justify-center gap-2 rounded-2xl bg-grey-500/8 py-6 text-sm font-semibold text-text-secondary transition-colors hover:bg-grey-500/16"
+                      >
+                        Add an equipment
+                        <PlusIcon size={18} />
+                      </button>
+                    ) : (
+                      <>
+                        <EquipmentUnitPicker
+                          equipments={equipments}
+                          deselected={deselected}
+                          onChange={setDeselected}
+                          onEdit={(e) => setEditEquip(e)}
+                        />
+                        <button
+                          onClick={() => setAdding(true)}
+                          className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-grey-400 py-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/8"
+                        >
+                          <PlusIcon size={18} />
+                          Add an equipment
+                        </button>
+                        <div className="flex items-center gap-2 rounded-xl bg-primary/8 px-3 py-3 text-sm text-primary-darker">
+                          <LocationIcon size={18} className="shrink-0 text-primary" />
+                          <span>
+                            Delivery to <span className="font-semibold">{addressLine}</span>. All equipments
+                            should be at the same location.
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </Section>
+
+              <Section title="DR-97 Tax-Exempt Certificate">
+                <input ref={certRef} type="file" className="hidden" onChange={onPickCert} />
+                {cert ? (
+                  <div className="flex items-center gap-3 rounded-2xl bg-white p-4">
+                    <FilePdfIcon size={30} className="shrink-0 text-error" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-text-primary">{cert}</p>
+                      <p className="text-xs text-text-secondary">On file — applies to all your deliveries</p>
+                    </div>
+                    <Button variant="soft" size="sm" onClick={() => certRef.current?.click()}>
+                      Replace
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => certRef.current?.click()}
+                    className="flex w-full flex-col items-center gap-1 rounded-2xl bg-white py-6 text-sm transition-colors hover:bg-grey-500/8"
+                  >
+                    <UploadIcon size={22} className="text-grey-500" />
+                    <span className="font-semibold text-text-primary">Upload file</span>
+                    <span className="text-xs text-text-secondary">Optional · click here to upload</span>
+                  </button>
+                )}
+              </Section>
             </div>
-          )}
-          {!equipAdding && (
-            <WizardFooter
-              onBack={back}
-              onCancel={() => router.push(cancelHref)}
-              onContinue={next}
-              continueLabel="Continue"
-              continueDisabled={!canContinue}
-            />
-          )}
+          </div>
+
+          {/* Summary + actions */}
+          <div className="rounded-2xl bg-white p-5 shadow-[var(--shadow-card)]">
+            <h2 className="text-lg font-bold text-text-primary">Request summary</h2>
+            <dl className="mt-3 flex flex-col gap-2 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-text-secondary">Delivery address</dt>
+                <dd className="text-right font-semibold text-text-primary">{addrValid ? addressLine : "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-text-secondary">Scheduled for</dt>
+                <dd className="text-right font-semibold text-text-primary">
+                  {dateISO && win ? `${formatLongDate(dateISO)} · ${win}` : "—"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-text-secondary">Urgency</dt>
+                <dd className="text-right font-semibold text-text-primary">
+                  {tier
+                    ? `${URGENCY_OPTIONS[tier].title} · ${feeLabel(URGENCY_OPTIONS[tier].fee)}`
+                    : "—"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-text-secondary">Equipment</dt>
+                <dd className="text-right font-semibold text-text-primary">
+                  {chosen.length ? `${chosen.length} · up to ${totalGallons} gal` : "—"}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="mt-5 flex gap-3">
+              <Button variant="soft" size="lg" onClick={() => router.push(cancelHref)}>
+                Cancel
+              </Button>
+              <Button size="lg" className="flex-1" disabled={!canPlace} onClick={finish}>
+                Place Order
+                <ArrowRightIcon size={20} />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
