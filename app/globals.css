@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Marketing landing palette — scoped to [data-landing-theme], see the file. */
+@import "../components/landing/landing.css";
 
 /*
   Fly by Night Fuel — design tokens
@@ -61,6 +63,8 @@
 
   /* ---- Font ---- */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  /* Display face — used by the marketing landing's headlines. */
+  --font-display: var(--font-oswald), var(--font-inter), ui-sans-serif, sans-serif;
 
   /* ---- Shadows (Minimal-style) ---- */
   --shadow-card: 0 0 2px 0 rgba(145, 158, 171, 0.2), 0 12px 24px -4px rgba(145, 158, 171, 0.12);

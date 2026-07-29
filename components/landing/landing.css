@@ -1,0 +1,43 @@
+/*
+  Landing-page palette — semantic `--l-*` vars layered on top of the app's
+  brand tokens (@theme in app/globals.css). Everything the landing renders
+  reads from these vars, so the whole marketing surface can be re-themed (or
+  lifted into its own deploy) without touching the product app.
+
+  Scoped to `[data-landing-theme]` so it can never leak into the app shell.
+*/
+
+[data-landing-theme="light"] {
+  --l-page: #f4f6f8; /* neutral */
+  --l-surface: #ffffff; /* paper */
+  --l-surface-2: #f9fafb; /* grey-100 */
+  --l-surface-deep: #eef1f6;
+  --l-heading: #161c24; /* ink */
+  --l-text: #454f5b; /* grey-700 */
+  --l-muted: #637381; /* text-secondary */
+  --l-accent: #3960d5; /* primary */
+  --l-accent-strong: #1f3d93;
+  --l-accent-soft: rgba(57, 96, 213, 0.1);
+  --l-on-accent: #ffffff;
+  --l-border: rgba(145, 158, 171, 0.24);
+  /* Outline-button border — primary/main at 48%, per the Figma Button component. */
+  --l-accent-border: rgba(57, 96, 213, 0.48);
+  --l-hero-glow: radial-gradient(1000px 460px at 50% -8%, rgba(57, 96, 213, 0.12), transparent 60%),
+    radial-gradient(760px 520px at 82% 10%, rgba(248, 201, 74, 0.28), transparent 62%);
+}
+
+/* Smooth-scroll for the landing's in-page nav anchors, and offset the targets
+   so a section heading clears the sticky header instead of hiding under it. */
+[data-landing-theme] {
+  scroll-behavior: smooth;
+}
+
+[data-landing-theme] [id] {
+  scroll-margin-top: 88px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-landing-theme] {
+    scroll-behavior: auto;
+  }
+}
