@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Drawer } from "@/components/ui/Drawer";
+import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { TextField, SelectField, TextAreaField } from "@/components/ui/Field";
 import {
@@ -152,11 +152,11 @@ export function EquipmentModal({
   const showError = (key: keyof typeof errors) => (touched ? errors[key] : "");
 
   return (
-    <Drawer
+    <Modal
       open={open}
       onClose={onClose}
       title={isEdit ? "Edit this equipment" : "Add an equipment"}
-      headerBorder
+      bodyClassName="px-6 py-2"
       headerActions={
         isEdit && equipment && onRequestDelete ? (
           <button
@@ -169,7 +169,7 @@ export function EquipmentModal({
         ) : undefined
       }
       footer={
-        <div className="flex gap-3">
+        <div className="flex w-full gap-3">
           <Button variant="soft" size="lg" onClick={onClose}>
             Cancel
           </Button>
@@ -180,7 +180,7 @@ export function EquipmentModal({
         </div>
       }
     >
-      <div className="px-6 py-4">
+      <div className="py-2">
         {!isEdit && (
           <>
             <p className="mb-4 text-xs text-error">* Mandatory</p>
@@ -346,6 +346,6 @@ export function EquipmentModal({
           )}
         </div>
       </div>
-    </Drawer>
+    </Modal>
   );
 }

@@ -37,7 +37,7 @@ export function OfferCard({
       className={`flex w-full items-center gap-3 rounded-2xl p-4 text-left transition-colors ${
         active
           ? "border-2 border-primary bg-primary-lighter"
-          : "border-2 border-transparent bg-neutral hover:bg-grey-500/16"
+          : "border-2 border-transparent bg-white hover:bg-grey-500/8"
       }`}
     >
       <span

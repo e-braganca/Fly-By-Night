@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
+const DURATION = 300; // ms — keep in sync with the transition classes below
+
+/** Centered dialog on desktop; bottom sheet that slides up on mobile. Animates
+    in/out with a slide + fade and stays mounted through the exit transition. */
 export function Modal({
   open,
   onClose,
@@ -21,6 +25,22 @@ export function Modal({
   bodyClassName?: string;
   width?: number;
 }) {
+  // `mounted` keeps the node in the DOM during the exit animation;
+  // `shown` drives the enter/exit transition.
+  const [mounted, setMounted] = useState(open);
+  const [shown, setShown] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const id = requestAnimationFrame(() => setShown(true));
+      return () => cancelAnimationFrame(id);
+    }
+    setShown(false);
+    const id = setTimeout(() => setMounted(false), DURATION);
+    return () => clearTimeout(id);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -32,18 +52,22 @@ export function Modal({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-grey-900/40 p-4"
+      className={`fixed inset-0 z-50 flex items-end justify-center transition-opacity duration-300 ease-out sm:items-center sm:p-4 ${
+        shown ? "bg-grey-900/40 opacity-100" : "bg-grey-900/0 opacity-0"
+      }`}
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-dropdown)]"
+        className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-[var(--shadow-dropdown)] transition-transform duration-300 ease-out will-change-transform sm:rounded-2xl ${
+          shown ? "translate-y-0" : "translate-y-full sm:translate-y-4"
+        }`}
         style={{ maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >

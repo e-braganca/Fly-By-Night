@@ -12,7 +12,6 @@ import { EquipmentModal } from "@/components/customer/EquipmentModal";
 import { MiniCalendar } from "@/components/schedule/MiniCalendar";
 import { WindowPicker, type DeliveryWindow } from "@/components/schedule/WindowPicker";
 import { UrgencyPicker } from "@/components/schedule/UrgencyPicker";
-import { EquipmentForm } from "@/components/schedule/EquipmentForm";
 import { ServiceAgreement } from "@/components/schedule/ServiceAgreement";
 import {
   EquipmentUnitPicker,
@@ -28,6 +27,8 @@ import {
   FilePdfIcon,
   ChevronDownIcon,
   LockIcon,
+  DropletIcon,
+  ReceiptIcon,
 } from "@/components/ui/Icon";
 import {
   URGENCY_OPTIONS,
@@ -37,6 +38,15 @@ import {
   parseISO,
   REFERENCE_TODAY,
 } from "@/lib/data/schedule";
+import {
+  FUEL_TYPES,
+  computeCost,
+  money,
+  OFF_ROAD_MIN,
+  OFF_ROAD_PRICE,
+  DEF_MAX,
+  type FuelTypeId,
+} from "@/lib/data/pricing";
 import {
   useEquipments,
   useAppStore,
@@ -159,6 +169,16 @@ export function ScheduleWizard({
   const [cert, setCert] = useState<string | null>(business.dr97 ?? null);
   const [addr, setAddr] = useState<AddressForm>({ ...EMPTY_ADDRESS, ...defaultAddress });
 
+  // What & how much — the product and quantity drive the live price.
+  const [fuelType, setFuelType] = useState<FuelTypeId | null>(null);
+  const [gallonsInput, setGallonsInput] = useState("");
+  // Tax status — a valid DR-13/DR-97 on file exempts the order from FL sales tax.
+  const [taxExempt, setTaxExempt] = useState<boolean | null>(
+    business.dr97 ? true : null,
+  );
+  // Payment (charged on completed delivery).
+  const [card, setCard] = useState({ number: "", expiry: "", cvc: "" });
+
   const gated = isCustomer && !accepted;
 
   const addressLine = `${addr.house} ${addr.street}, ${addr.city}, ${addr.state}`;
@@ -167,13 +187,29 @@ export function ScheduleWizard({
   const chosen = equipments
     .map((e) => ({ e, count: selectedUnitCount(e, deselected) }))
     .filter((x) => x.count > 0);
-  const totalGallons = chosen.reduce((s, x) => s + x.count * x.e.maxTankCapacity, 0);
+  const capacityGallons = chosen.reduce((s, x) => s + x.count * x.e.maxTankCapacity, 0);
+
+  const isDef = fuelType === "def";
+  const rawGallons = Math.max(0, Math.floor(Number(gallonsInput) || 0));
+  // DEF is a flat service call capped at a 25-gallon top-off.
+  const gallons = isDef ? Math.min(DEF_MAX, rawGallons) : rawGallons;
+  const orderGallons = gallons;
+  const cost = computeCost({
+    fuelType,
+    gallons,
+    taxExempt: taxExempt === true,
+    urgencyFee: tier ? URGENCY_OPTIONS[tier].fee : 0,
+  });
+  const quantityOk = gallons > 0;
+
   // Zip is optional (customer directory addresses don't include it).
   const addrValid = [addr.house, addr.street, addr.city, addr.state, addr.country].every(
     (v) => v.trim().length > 0,
   );
   const canPlace = Boolean(
-    tier &&
+    fuelType &&
+      quantityOk &&
+      tier &&
       dateISO &&
       win &&
       addrValid &&
@@ -234,6 +270,7 @@ export function ScheduleWizard({
     const file = e.target.files?.[0];
     if (!file) return;
     setCert(file.name);
+    setTaxExempt(true);
     updateBusiness({ dr97: file.name });
   }
 
@@ -245,7 +282,8 @@ export function ScheduleWizard({
       isEditable: true,
       address: addressLine,
       urgency: tier,
-      gallonsScheduled: totalGallons,
+      gallonsScheduled: orderGallons,
+      price: money(cost.total),
       equipment: chosen.map(({ e, count }) => ({
         name: e.name,
         units: count,
@@ -403,6 +441,118 @@ export function ScheduleWizard({
             )}
 
             <div className="flex flex-col gap-8">
+              <Section
+                title="What are we bringing?"
+                description="Pick the product for this delivery."
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {FUEL_TYPES.map((f) => {
+                    const selected = fuelType === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => {
+                          setFuelType(f.id);
+                          if (f.id === "def" && rawGallons > DEF_MAX) {
+                            setGallonsInput(String(DEF_MAX));
+                          }
+                        }}
+                        className={`flex flex-col gap-3 rounded-2xl border-2 p-4 text-left transition-colors ${
+                          selected
+                            ? "border-primary bg-primary/8"
+                            : "border-transparent bg-white hover:border-grey-300"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <span
+                            className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${
+                              selected ? "bg-primary text-white" : "bg-primary/8 text-primary"
+                            }`}
+                          >
+                            <DropletIcon size={20} />
+                          </span>
+                          <span className="text-right">
+                            <span className="block text-lg font-bold text-text-primary">
+                              {money(f.price)}
+                            </span>
+                            <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                              {f.badge}
+                            </span>
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-text-primary">{f.name}</p>
+                          <p className="mt-0.5 text-xs text-text-secondary">{f.desc}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Section>
+
+              <Section
+                title="How much?"
+                description={
+                  isDef
+                    ? `DEF Top-Off is a flat service call — enter the top-off amount (up to ${DEF_MAX} gallons).`
+                    : "200-gallon minimum on off-road fuel. Your price appears the moment you type."
+                }
+              >
+                <div className="flex flex-col gap-3 rounded-2xl bg-white p-5">
+                  <div className="flex items-end gap-3">
+                    <div className="flex-1">
+                      <label
+                        htmlFor="gallons"
+                        className="mb-1.5 block text-sm font-semibold text-text-primary"
+                      >
+                        Gallons {isDef && <span className="text-text-secondary">(max {DEF_MAX})</span>}
+                      </label>
+                      <input
+                        id="gallons"
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={gallonsInput}
+                        max={isDef ? DEF_MAX : undefined}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "").slice(0, 6);
+                          if (isDef) {
+                            const n = Math.min(DEF_MAX, Number(digits) || 0);
+                            setGallonsInput(n ? String(n) : "");
+                          } else {
+                            setGallonsInput(digits);
+                          }
+                        }}
+                        disabled={!fuelType}
+                        className="w-full rounded-lg border border-grey-300 bg-white px-3 py-2.5 text-2xl font-bold text-text-primary outline-none transition-colors placeholder:text-text-disabled focus:border-primary disabled:opacity-50"
+                      />
+                    </div>
+                    <div className="pb-2 text-right">
+                      <p className="text-2xl font-bold text-primary">{money(cost.fuel)}</p>
+                      <p className="text-xs text-text-secondary">
+                        {isDef
+                          ? `flat service · up to ${DEF_MAX} gal`
+                          : `${gallons} gal × ${money(OFF_ROAD_PRICE)}/gal`}
+                      </p>
+                    </div>
+                  </div>
+                  {isDef && (
+                    <p className="text-xs text-text-secondary">
+                      Billed per visit regardless of the exact quantity dispensed, up to {DEF_MAX} gallons.
+                    </p>
+                  )}
+                  {!isDef && cost.belowMinimum && (
+                    <div className="flex items-start gap-2 rounded-xl bg-secondary-lighter px-3 py-2.5 text-xs font-medium text-secondary-dark">
+                      <span aria-hidden>⚠</span>
+                      <span>
+                        Below the {OFF_ROAD_MIN}-gallon minimum — a $150 small-order fee
+                        applies (per your Service Agreement §4).
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </Section>
+
               <Section title="How urgent is the delivery?" description="Choose how quickly you need this fuel delivery.">
                 <UrgencyPicker value={tier} onChange={chooseTier} />
               </Section>
@@ -461,75 +611,189 @@ export function ScheduleWizard({
 
               <Section
                 title="Your Equipment"
-                description={adding ? "Provide the equipment details and its units." : "Add and select the equipment you plan to fuel."}
+                description="Add and select the equipment you plan to fuel."
               >
-                {adding ? (
-                  <EquipmentForm
-                    location={addressLine}
-                    onSaved={() => setAdding(false)}
-                    onCancel={() => setAdding(false)}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-4">
-                    {equipments.length === 0 ? (
+                <div className="flex flex-col gap-4">
+                  {equipments.length === 0 ? (
+                    <button
+                      onClick={() => setAdding(true)}
+                      className="flex items-center justify-center gap-2 rounded-2xl bg-grey-500/8 py-6 text-sm font-semibold text-text-secondary transition-colors hover:bg-grey-500/16"
+                    >
+                      Add an equipment
+                      <PlusIcon size={18} />
+                    </button>
+                  ) : (
+                    <>
+                      <EquipmentUnitPicker
+                        equipments={equipments}
+                        deselected={deselected}
+                        onChange={setDeselected}
+                        onEdit={(e) => setEditEquip(e)}
+                      />
                       <button
                         onClick={() => setAdding(true)}
-                        className="flex items-center justify-center gap-2 rounded-2xl bg-grey-500/8 py-6 text-sm font-semibold text-text-secondary transition-colors hover:bg-grey-500/16"
+                        className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-grey-400 py-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/8"
                       >
-                        Add an equipment
                         <PlusIcon size={18} />
+                        Add an equipment
                       </button>
-                    ) : (
-                      <>
-                        <EquipmentUnitPicker
-                          equipments={equipments}
-                          deselected={deselected}
-                          onChange={setDeselected}
-                          onEdit={(e) => setEditEquip(e)}
-                        />
-                        <button
-                          onClick={() => setAdding(true)}
-                          className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-grey-400 py-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/8"
-                        >
-                          <PlusIcon size={18} />
-                          Add an equipment
-                        </button>
-                        <div className="flex items-center gap-2 rounded-xl bg-primary/8 px-3 py-3 text-sm text-primary-darker">
-                          <LocationIcon size={18} className="shrink-0 text-primary" />
-                          <span>
-                            Delivery to <span className="font-semibold">{addressLine}</span>. All equipments
-                            should be at the same location.
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
+                      <div className="flex items-center gap-2 rounded-xl bg-primary/8 px-3 py-3 text-sm text-primary-darker">
+                        <LocationIcon size={18} className="shrink-0 text-primary" />
+                        <span>
+                          Delivery to <span className="font-semibold">{addressLine}</span>. All equipments
+                          should be at the same location.
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
               </Section>
 
-              <Section title="DR-97 Tax-Exempt Certificate">
+              <Section
+                title="Tax status"
+                description="Off-road dyed diesel is subject to Florida sales tax unless you have a valid exemption certificate on file (DR-13 resale or DR-97 agricultural)."
+              >
                 <input ref={certRef} type="file" className="hidden" onChange={onPickCert} />
-                {cert ? (
-                  <div className="flex items-center gap-3 rounded-2xl bg-white p-4">
-                    <FilePdfIcon size={30} className="shrink-0 text-error" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-text-primary">{cert}</p>
-                      <p className="text-xs text-text-secondary">On file — applies to all your deliveries</p>
-                    </div>
-                    <Button variant="soft" size="sm" onClick={() => certRef.current?.click()}>
-                      Replace
-                    </Button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => certRef.current?.click()}
-                    className="flex w-full flex-col items-center gap-1 rounded-2xl bg-white py-6 text-sm transition-colors hover:bg-grey-500/8"
+                <div className="flex flex-col gap-3">
+                  <div
+                    className={`rounded-2xl border-2 p-4 transition-colors ${
+                      taxExempt === true
+                        ? "border-primary bg-primary/8"
+                        : "border-transparent bg-white hover:border-grey-300"
+                    }`}
                   >
-                    <UploadIcon size={22} className="text-grey-500" />
-                    <span className="font-semibold text-text-primary">Upload file</span>
-                    <span className="text-xs text-text-secondary">Optional · click here to upload</span>
+                    <button
+                      type="button"
+                      onClick={() => setTaxExempt(true)}
+                      className="flex w-full items-start gap-3 text-left"
+                    >
+                      <span
+                        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 ${
+                          taxExempt === true ? "border-primary bg-primary text-white" : "border-grey-400"
+                        }`}
+                      >
+                        {taxExempt === true && <CheckIcon size={12} />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-text-primary">
+                          Yes — I have a DR-13 or DR-97
+                        </span>
+                        <span className="mt-0.5 block text-xs text-text-secondary">
+                          Upload it once and we&apos;ll apply your exemption to every order.
+                        </span>
+                      </span>
+                    </button>
+
+                    {taxExempt === true &&
+                      (cert ? (
+                        <div className="mt-3 flex items-center gap-3 rounded-xl bg-neutral p-4">
+                          <FilePdfIcon size={30} className="shrink-0 text-error" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-text-primary">{cert}</p>
+                            <p className="text-xs text-text-secondary">
+                              On file — applies to all your deliveries
+                            </p>
+                          </div>
+                          <Button variant="soft" size="sm" onClick={() => certRef.current?.click()}>
+                            Replace
+                          </Button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => certRef.current?.click()}
+                          className="mt-3 flex w-full flex-col items-center gap-1 rounded-xl border-2 border-dashed border-grey-400 bg-neutral py-6 text-sm transition-colors hover:bg-grey-500/8"
+                        >
+                          <UploadIcon size={22} className="text-grey-500" />
+                          <span className="font-semibold text-text-primary">
+                            📎 Tap to upload your certificate (PDF or photo)
+                          </span>
+                          <span className="text-xs text-text-secondary">DR-13 resale or DR-97 agricultural</span>
+                        </button>
+                      ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setTaxExempt(false)}
+                    className={`flex items-start gap-3 rounded-2xl border-2 p-4 text-left transition-colors ${
+                      taxExempt === false
+                        ? "border-primary bg-primary/8"
+                        : "border-transparent bg-white hover:border-grey-300"
+                    }`}
+                  >
+                    <span
+                      className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 ${
+                        taxExempt === false ? "border-primary bg-primary text-white" : "border-grey-400"
+                      }`}
+                    >
+                      {taxExempt === false && <CheckIcon size={12} />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-text-primary">No certificate</span>
+                      <span className="mt-0.5 block text-xs text-text-secondary">
+                        Standard Florida sales tax (6.5%) will apply to taxable fuel.
+                      </span>
+                    </span>
                   </button>
-                )}
+                </div>
+              </Section>
+
+              <Section
+                title="Payment"
+                description="Charged on completed delivery. No pre-auth games."
+              >
+                <div className="flex flex-col gap-4 rounded-2xl bg-white p-5">
+                  <div>
+                    <label
+                      htmlFor="card-number"
+                      className="mb-1.5 block text-sm font-semibold text-text-primary"
+                    >
+                      Card number
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="card-number"
+                        inputMode="numeric"
+                        placeholder="1234 5678 9012 3456"
+                        value={card.number}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
+                          const grouped = digits.replace(/(.{4})/g, "$1 ").trim();
+                          setCard((c) => ({ ...c, number: grouped }));
+                        }}
+                        className="w-full rounded-lg border border-grey-300 bg-white px-3 py-2.5 pr-10 text-sm text-text-primary outline-none transition-colors placeholder:text-text-disabled focus:border-primary"
+                      />
+                      <ReceiptIcon
+                        size={18}
+                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-grey-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <TextField
+                      id="card-expiry"
+                      label="Expiry"
+                      placeholder="MM/YY"
+                      inputMode="numeric"
+                      value={card.expiry}
+                      onChange={(e) => {
+                        const d = e.target.value.replace(/\D/g, "").slice(0, 4);
+                        const v = d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
+                        setCard((c) => ({ ...c, expiry: v }));
+                      }}
+                    />
+                    <TextField
+                      id="card-cvc"
+                      label="CVC"
+                      placeholder="123"
+                      inputMode="numeric"
+                      value={card.cvc}
+                      onChange={(e) =>
+                        setCard((c) => ({ ...c, cvc: e.target.value.replace(/\D/g, "").slice(0, 4) }))
+                      }
+                    />
+                  </div>
+                </div>
               </Section>
             </div>
           </div>
@@ -538,6 +802,22 @@ export function ScheduleWizard({
           <div className="rounded-2xl bg-white p-5 shadow-[var(--shadow-card)]">
             <h2 className="text-lg font-bold text-text-primary">Request summary</h2>
             <dl className="mt-3 flex flex-col gap-2 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-text-secondary">Fuel type</dt>
+                <dd className="text-right font-semibold text-text-primary">
+                  {fuelType ? FUEL_TYPES.find((f) => f.id === fuelType)?.name : "—"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-text-secondary">Quantity</dt>
+                <dd className="text-right font-semibold text-text-primary">
+                  {fuelType && gallons > 0
+                    ? isDef
+                      ? `${gallons} gal · flat service`
+                      : `${gallons} gal`
+                    : "—"}
+                </dd>
+              </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-text-secondary">Delivery address</dt>
                 <dd className="text-right font-semibold text-text-primary">{addrValid ? addressLine : "—"}</dd>
@@ -559,10 +839,48 @@ export function ScheduleWizard({
               <div className="flex justify-between gap-4">
                 <dt className="text-text-secondary">Equipment</dt>
                 <dd className="text-right font-semibold text-text-primary">
-                  {chosen.length ? `${chosen.length} · up to ${totalGallons} gal` : "—"}
+                  {chosen.length ? `${chosen.length} · up to ${capacityGallons} gal` : "—"}
                 </dd>
               </div>
             </dl>
+
+            {/* Cost breakdown */}
+            {fuelType && quantityOk && (
+              <dl className="mt-4 flex flex-col gap-2 border-t border-divider pt-4 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-text-secondary">
+                    {isDef ? "DEF Top-Off — flat service" : `Fuel — ${gallons} gal`}
+                  </dt>
+                  <dd className="font-semibold text-text-primary">{money(cost.fuel)}</dd>
+                </div>
+                {cost.smallOrder > 0 && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-text-secondary">Small-order fee (under {OFF_ROAD_MIN} gal)</dt>
+                    <dd className="font-semibold text-text-primary">{money(cost.smallOrder)}</dd>
+                  </div>
+                )}
+                {cost.urgency > 0 && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-text-secondary">Delivery speed</dt>
+                    <dd className="font-semibold text-text-primary">{money(cost.urgency)}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-4">
+                  <dt className="text-text-secondary">FL sales tax (6.5%)</dt>
+                  <dd className="font-semibold text-text-primary">
+                    {taxExempt === true ? (
+                      <span className="text-success-dark">EXEMPT ✓</span>
+                    ) : (
+                      money(cost.tax)
+                    )}
+                  </dd>
+                </div>
+                <div className="mt-1 flex justify-between gap-4 border-t border-divider pt-3">
+                  <dt className="text-base font-bold text-text-primary">Total</dt>
+                  <dd className="text-base font-bold text-text-primary">{money(cost.total)}</dd>
+                </div>
+              </dl>
+            )}
 
             <div className="mt-5 flex gap-3">
               <Button variant="soft" size="lg" onClick={() => router.push(cancelHref)}>
@@ -577,11 +895,14 @@ export function ScheduleWizard({
         </div>
       </div>
 
-      {/* Editing an existing equipment reuses the drawer. */}
+      {/* Adding / editing an equipment both use the same modal. */}
       <EquipmentModal
-        open={Boolean(editEquip)}
+        open={adding || Boolean(editEquip)}
         equipment={editEquip}
-        onClose={() => setEditEquip(null)}
+        onClose={() => {
+          setAdding(false);
+          setEditEquip(null);
+        }}
         location={addressLine}
       />
     </div>
