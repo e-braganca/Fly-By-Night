@@ -26,7 +26,7 @@ import { visibleNotifications } from "@/lib/data/notifications";
 export const CUSTOMER_NAV = [
   { label: "Home", href: "/customer/dashboard", Icon: HomeIcon },
   { label: "Deliveries", href: "/customer/deliveries", Icon: CalendarIcon },
-  { label: "Equipments", href: "/customer/equipments", Icon: TruckIcon },
+  { label: "Equipment", href: "/customer/equipments", Icon: TruckIcon },
   { label: "Receipts", href: "/customer/receipts", Icon: InvoiceIcon },
 ];
 

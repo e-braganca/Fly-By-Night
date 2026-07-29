@@ -43,15 +43,16 @@ export function feeLabel(fee: number): string {
 }
 
 const NOTE_LESS =
-  "Refelling was 3 gallons less than the scheduled amount due to equipments capacity.";
+  "Refuelling was 3 gallons less than the scheduled amount due to equipment capacity.";
 const NOTE_MORE =
-  "Refelling was 11 gallons more than the scheduled amount due to equipments capacity.";
+  "Refuelling was 11 gallons more than the scheduled amount due to equipment capacity.";
 
+/* Mirrors the customer's fleet in ./equipments so a delivery never lists gear
+   they don't own. 2×90 + 1×80 + 3×30 = 350 gal of capacity. */
 const defaultLines: DeliveryEquipmentLine[] = [
-  { name: "Wheel Tractor-Scraper", units: 9, gallonsMax: 560, fuelType: "Off-road" },
-  { name: "Compact Track Loader", units: 2, gallonsMax: 560, fuelType: "Off-road" },
-  { name: "50kw Mobile Silent Diesel Generator", units: 1, gallonsMax: 560, fuelType: "Off-road" },
-  { name: "50kw Mobile Silent Diesel Generator", units: 1, gallonsMax: 560, fuelType: "Off-road" },
+  { name: "CAT 320 Excavator", units: 2, gallonsMax: 90, fuelType: "Off-road" },
+  { name: "Atlas Copco QAS 60 Diesel Generator", units: 1, gallonsMax: 80, fuelType: "Off-road" },
+  { name: "Atlas Copco QPAS 40 Light Tower", units: 3, gallonsMax: 30, fuelType: "Off-road" },
 ];
 
 const certificate = [

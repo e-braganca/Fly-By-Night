@@ -602,7 +602,7 @@ export function ScheduleWizard({
                   <TextAreaField
                     id="notes"
                     label="Access Notes"
-                    placeholder="Please also provide information on how to access the equipments."
+                    placeholder="Please also provide information on how to access the equipment."
                     value={addr.notes}
                     onChange={(e) => set("notes", e.target.value)}
                   />
@@ -640,7 +640,7 @@ export function ScheduleWizard({
                       <div className="flex items-center gap-2 rounded-xl bg-primary/8 px-3 py-3 text-sm text-primary-darker">
                         <LocationIcon size={18} className="shrink-0 text-primary" />
                         <span>
-                          Delivery to <span className="font-semibold">{addressLine}</span>. All equipments
+                          Delivery to <span className="font-semibold">{addressLine}</span>. All equipment
                           should be at the same location.
                         </span>
                       </div>

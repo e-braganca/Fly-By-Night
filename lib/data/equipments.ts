@@ -16,52 +16,25 @@ export const EQUIPMENT_SUBTYPES = [
 ] as const;
 
 const OFF = "/equipments/off-road";
-const ON = "/equipments/on-road";
 
+/*
+  A small, realistic fleet for the demo: three pieces of off-road machinery with
+  a couple of units each. All off-road on purpose — the company only delivers
+  dyed diesel and DEF, never on-road fuel (see the Service Agreement §3).
+*/
 export const seedEquipments: Equipment[] = [
-  // Off-road machinery (runs on tax-exempt dyed diesel).
   {
     id: "e1",
     name: "CAT 320 Excavator",
     classification: "Off-road",
     subtype: "Construction",
     maxTankCapacity: 90,
-    quantity: 3,
+    quantity: 2,
     image: `${OFF}/excavator.png`,
     location: DEFAULT_LOCATION,
   },
   {
     id: "e2",
-    name: "CAT 299D3 Compact Track Loader",
-    classification: "Off-road",
-    subtype: "Construction",
-    maxTankCapacity: 30,
-    quantity: 2,
-    image: `${OFF}/compact-track-loader.png`,
-    location: DEFAULT_LOCATION,
-  },
-  {
-    id: "e3",
-    name: "BOMAG Vibratory Soil Compactor",
-    classification: "Off-road",
-    subtype: "Construction",
-    maxTankCapacity: 60,
-    quantity: 1,
-    image: `${OFF}/vibratory-soil-compactor.png`,
-    location: DEFAULT_LOCATION,
-  },
-  {
-    id: "e4",
-    name: "Atlas Copco XAS 185 Air Compressor",
-    classification: "Off-road",
-    subtype: "Other",
-    maxTankCapacity: 25,
-    quantity: 2,
-    image: `${OFF}/air-compressor.png`,
-    location: DEFAULT_LOCATION,
-  },
-  {
-    id: "e5",
     name: "Atlas Copco QAS 60 Diesel Generator",
     classification: "Off-road",
     subtype: "Generator",
@@ -71,54 +44,13 @@ export const seedEquipments: Equipment[] = [
     location: DEFAULT_LOCATION,
   },
   {
-    id: "e6",
+    id: "e3",
     name: "Atlas Copco QPAS 40 Light Tower",
     classification: "Off-road",
     subtype: "Lighting",
     maxTankCapacity: 30,
-    quantity: 4,
-    image: `${OFF}/light-tower.png`,
-    location: DEFAULT_LOCATION,
-  },
-  // On-road, road-registered trucks (taxed on-road diesel).
-  {
-    id: "e7",
-    name: "Volvo VHD Dump Truck",
-    classification: "On-road",
-    subtype: "Transport",
-    maxTankCapacity: 100,
-    quantity: 2,
-    image: `${ON}/dump-truck.png`,
-    location: DEFAULT_LOCATION,
-  },
-  {
-    id: "e8",
-    name: "Scania P360 Concrete Mixer Truck",
-    classification: "On-road",
-    subtype: "Transport",
-    maxTankCapacity: 90,
-    quantity: 1,
-    image: `${ON}/concrete-mixer-truck.png`,
-    location: DEFAULT_LOCATION,
-  },
-  {
-    id: "e9",
-    name: "Ford F-350 Work Truck",
-    classification: "On-road",
-    subtype: "Transport",
-    maxTankCapacity: 40,
     quantity: 3,
-    image: `${ON}/pickup-work-truck.png`,
-    location: DEFAULT_LOCATION,
-  },
-  {
-    id: "e10",
-    name: "Freightliner Lowboy Hauler",
-    classification: "On-road",
-    subtype: "Transport",
-    maxTankCapacity: 120,
-    quantity: 1,
-    image: `${ON}/semi-truck-lowboy.png`,
+    image: `${OFF}/light-tower.png`,
     location: DEFAULT_LOCATION,
   },
 ];

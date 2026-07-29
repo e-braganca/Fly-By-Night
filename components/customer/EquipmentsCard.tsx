@@ -24,10 +24,10 @@ export function EquipmentsCard() {
   return (
     <section className="flex flex-1 flex-col gap-3">
       <SectionHeader
-        title="Your Equipments"
+        title="Your Equipment"
         action={
           <Link href="/customer/equipments">
-            <Button variant="dark" size="icon" aria-label="Manage equipments">
+            <Button variant="dark" size="icon" aria-label="Manage equipment">
               <PencilIcon size={18} />
             </Button>
           </Link>
@@ -64,7 +64,7 @@ export function EquipmentsCard() {
         <div className="flex flex-col items-center gap-2 px-4 pb-2 pt-3">
           {overflow > 0 && (
             <p className="text-sm font-semibold text-text-primary">
-              +{overflow} more Equipments
+              +{overflow} more
             </p>
           )}
           <Link href="/customer/equipments" className="w-full">

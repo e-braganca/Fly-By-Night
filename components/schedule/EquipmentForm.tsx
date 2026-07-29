@@ -220,7 +220,7 @@ export function EquipmentForm({
       <div className="mt-2 flex gap-2">
         <Button variant="soft" size="lg" onClick={onCancel}>
           <ChevronLeftIcon size={18} />
-          Equipments list
+          Equipment list
         </Button>
         <Button size="lg" className="flex-1" disabled={touched && !valid} onClick={save}>
           <PlusIcon size={18} />
