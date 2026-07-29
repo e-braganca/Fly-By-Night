@@ -28,7 +28,7 @@ actions — both defined in `content.ts`:
   straight into the request wizard (Service Agreement first).
 - `SIGNIN_URL` → `/login` — plain sign in / register, lands on the dashboard.
 
-"Sign In / Register" collapses out of the nav below the `sm` breakpoint, so the
+"Access Account" collapses out of the nav below the `sm` breakpoint, so the
 footer carries it too — keep both if you rework the nav.
 
 ## Theming

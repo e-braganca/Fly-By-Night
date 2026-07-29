@@ -76,6 +76,8 @@ type AppState = {
   cancelDelivery: (id: string) => void;
   markDeliveryFueled: (address: string) => void;
   signAgreement: () => void;
+  /** Creating an account clears the signature so the wizard gates on it again. */
+  resetAgreement: () => void;
 
   openNotifications: () => void;
   closeNotifications: () => void;
@@ -152,6 +154,7 @@ export const useAppStore = create<AppState>((set) => ({
     ),
 
   signAgreement: () => set({ agreementSigned: true }),
+  resetAgreement: () => set({ agreementSigned: false }),
 
   openNotifications: () => set({ notificationsOpen: true }),
   closeNotifications: () => set({ notificationsOpen: false }),

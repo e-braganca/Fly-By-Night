@@ -115,7 +115,7 @@ export function LandingPage() {
                 Below `sm` this collapses and the footer carries sign-in. */}
             <span className="hidden sm:inline-flex">
               <Button href={SIGNIN_URL} variant="outline" size="md">
-                Sign In / Register
+                Access Account
               </Button>
             </span>
             <Button href={REQUEST_URL} size="md">
@@ -459,7 +459,7 @@ export function LandingPage() {
                 href={SIGNIN_URL}
                 className="mb-2.5 block text-[14.5px] text-[var(--l-muted)] transition-colors hover:text-[var(--l-accent)]"
               >
-                Sign In / Register
+                Access Account
               </Link>
               <span className="mb-2.5 block text-[14.5px] text-[var(--l-muted)]">
                 Palm Beach County, FL
