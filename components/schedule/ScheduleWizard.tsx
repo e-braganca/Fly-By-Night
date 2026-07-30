@@ -30,6 +30,8 @@ import {
   LockIcon,
   DropletIcon,
   EyeIcon,
+  PencilIcon,
+  AlertTriangleIcon,
 } from "@/components/ui/Icon";
 import {
   URGENCY_OPTIONS,
@@ -43,9 +45,10 @@ import {
   FUEL_TYPES,
   computeCost,
   money,
+  ratePerGallon,
   OFF_ROAD_MIN,
-  OFF_ROAD_PRICE,
   DEF_MAX,
+  DEF_FLAT,
   type FuelTypeId,
 } from "@/lib/data/pricing";
 import {
@@ -92,6 +95,10 @@ function parseAddress(s: string): AddressForm {
     notes: "",
   };
 }
+
+/** Shown wherever a changed delivery address needs calling out. */
+const ADDRESS_REVIEW_NOTE =
+  "This delivery goes to a new address, so the request is placed under review. We'll confirm access before dispatch.";
 
 /** Section wrapper: numbered-free titled block used down the scrolling page. */
 function Section({
@@ -166,9 +173,11 @@ export function ScheduleWizard({
   // A guest hasn't signed anything yet, so they always get the full agreement.
   // Captured once so checking the box doesn't swap it out mid-flow.
   const [firstTime] = useState(isGuest || (isCustomer && !agreementSigned));
-  const [accepted, setAccepted] = useState(
-    isGuest ? false : !isCustomer || agreementSigned,
-  );
+  /* Every request needs its own opt-in, even when the customer accepted this
+     same version before — `firstTime` only decides whether the agreement is
+     shown in full or collapsed. Admin books on the customer's behalf and
+     doesn't tick it. */
+  const [accepted, setAccepted] = useState(!isCustomer);
   const [reviewing, setReviewing] = useState(false);
 
   /* Guest flow: who they are, collected alongside the agreement. Confirming
@@ -197,6 +206,18 @@ export function ScheduleWizard({
   // What & how much — the product and quantity drive the live price.
   const [fuelType, setFuelType] = useState<FuelTypeId | null>(null);
   const [gallonsInput, setGallonsInput] = useState("");
+  /** Optional DEF top-off added on to the diesel delivery (flat rate). */
+  const [addDef, setAddDef] = useState(false);
+
+  /* The address collapses to a summary once confirmed. A returning customer
+     starts collapsed — their address is already on file; a first-timer fills it
+     in and confirms. Changing it later goes through a review. */
+  const [addressConfirmed, setAddressConfirmed] = useState(!firstTime);
+  const [addressOpen, setAddressOpen] = useState(false);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [draftAddr, setDraftAddr] = useState<AddressForm>(addr);
+  /** Set when the delivery address differs from the one on file. */
+  const [addressUnderReview, setAddressUnderReview] = useState(false);
   // Tax status — a valid DR-13/DR-97 on file exempts the order from FL sales tax.
   const [taxExempt, setTaxExempt] = useState<boolean | null>(
     business.dr97 ? true : null,
@@ -220,14 +241,12 @@ export function ScheduleWizard({
     .filter((x) => x.count > 0);
   const capacityGallons = chosen.reduce((s, x) => s + x.count * x.e.maxTankCapacity, 0);
 
-  const isDef = fuelType === "def";
-  const rawGallons = Math.max(0, Math.floor(Number(gallonsInput) || 0));
-  // DEF is a flat service call capped at a 25-gallon top-off.
-  const gallons = isDef ? Math.min(DEF_MAX, rawGallons) : rawGallons;
+  const gallons = Math.max(0, Math.floor(Number(gallonsInput) || 0));
   const orderGallons = gallons;
   const cost = computeCost({
     fuelType,
     gallons,
+    addDef,
     taxExempt: taxExempt === true,
     urgencyFee: tier ? URGENCY_OPTIONS[tier].fee : 0,
   });
@@ -237,6 +256,10 @@ export function ScheduleWizard({
   const addrValid = [addr.house, addr.street, addr.city, addr.state, addr.country].every(
     (v) => v.trim().length > 0,
   );
+  /* Admin keeps the plain address form; the collapse-on-confirm flow is for the
+     customer and guest wizards. */
+  const addressCollapsible = isCustomer;
+  const addressDone = !addressCollapsible || (addressConfirmed && addrValid);
   const canPlace = Boolean(
     fuelType &&
       quantityOk &&
@@ -244,12 +267,33 @@ export function ScheduleWizard({
       dateISO &&
       win &&
       addrValid &&
+      addressDone &&
       chosen.length > 0 &&
       (isGuest ? detailsConfirmed : isCustomer ? accepted : customer),
   );
 
   const set = <K extends keyof AddressForm>(k: K, v: string) =>
     setAddr((a) => ({ ...a, [k]: v }));
+
+  const setDraft = <K extends keyof AddressForm>(k: K, v: string) =>
+    setDraftAddr((a) => ({ ...a, [k]: v }));
+
+  const draftValid = [
+    draftAddr.house,
+    draftAddr.street,
+    draftAddr.city,
+    draftAddr.state,
+    draftAddr.country,
+  ].every((v) => v.trim().length > 0);
+
+  /** Applies the change requested in the modal — the order proceeds under review. */
+  function applyAddressChange() {
+    if (!draftValid) return;
+    setAddr(draftAddr);
+    setAddressUnderReview(true);
+    setAddressModalOpen(false);
+    setAddressConfirmed(true);
+  }
 
   // Auto-fill City / State from a US ZIP via the free Zippopotam.us API.
   const zipReq = useRef(0);
@@ -324,7 +368,11 @@ export function ScheduleWizard({
         gallonsMax: e.maxTankCapacity,
         fuelType: e.classification,
       })),
-      notes: addr.notes.trim() || undefined,
+      // A changed address rides along on the delivery so the review is visible
+      // wherever the request is read back.
+      notes: [addr.notes.trim(), addressUnderReview ? ADDRESS_REVIEW_NOTE : ""]
+        .filter(Boolean)
+        .join(" ") || undefined,
       documents: cert
         ? [{ label: "DR-97 Tax-Exempt Certificate", filename: cert, url: "#" }]
         : undefined,
@@ -521,29 +569,55 @@ export function ScheduleWizard({
               </div>
             </Section>
           )}
+          {/* Returning customer: the agreement they've already seen stays
+              collapsed, but every request still needs its own opt-in. */}
           {isCustomer && !firstTime && (
             <div className="rounded-2xl bg-white p-4 shadow-[var(--shadow-card)]">
               <div className="flex items-center gap-3">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-success/16 text-success-dark">
-                  <CheckIcon size={18} />
+                <span
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${
+                    accepted ? "bg-success/16 text-success-dark" : "bg-grey-500/12 text-grey-600"
+                  }`}
+                >
+                  {accepted ? <CheckIcon size={18} /> : <FilePdfIcon size={18} />}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-text-primary">Service Agreement accepted</p>
-                  <p className="text-xs text-text-secondary">Applies to all your deliveries.</p>
+                  <p className="text-sm font-semibold text-text-primary">
+                    Service Agreement &amp; Terms
+                  </p>
+                  <p className="text-xs text-text-secondary">
+                    Same version you accepted before — confirm it for this delivery.
+                  </p>
                 </div>
                 <button
                   onClick={() => setReviewing((r) => !r)}
                   className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-semibold text-primary hover:bg-primary/8"
                 >
-                  Review
+                  {reviewing ? "Hide" : "Review"}
                   <ChevronDownIcon size={16} className={`transition-transform ${reviewing ? "rotate-180" : ""}`} />
                 </button>
               </div>
+
               {reviewing && (
                 <div className="mt-4 max-h-[380px] overflow-y-auto rounded-xl border border-grey-500/16 p-4">
                   <ServiceAgreement />
                 </div>
               )}
+
+              <label className="mt-4 flex cursor-pointer items-start gap-3 border-t border-divider pt-4">
+                <span className="pt-0.5">
+                  <Checkbox
+                    checked={accepted}
+                    onChange={acceptAgreement}
+                    aria-label="Accept the Service Agreement"
+                  />
+                </span>
+                <span className="text-sm text-text-primary">
+                  I agree to the{" "}
+                  <span className="font-semibold">Service Agreement, Terms &amp; Conditions</span>{" "}
+                  for this delivery.
+                </span>
+              </label>
             </div>
           )}
 
@@ -573,12 +647,7 @@ export function ScheduleWizard({
                       <button
                         key={f.id}
                         type="button"
-                        onClick={() => {
-                          setFuelType(f.id);
-                          if (f.id === "def" && rawGallons > DEF_MAX) {
-                            setGallonsInput(String(DEF_MAX));
-                          }
-                        }}
+                        onClick={() => setFuelType(f.id)}
                         className={`flex flex-col gap-3 rounded-2xl border-2 p-4 text-left transition-colors ${
                           selected
                             ? "border-primary bg-primary/8"
@@ -599,7 +668,7 @@ export function ScheduleWizard({
                                 {money(f.price)}
                               </span>
                               <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                                {f.badge}
+                                PER GAL
                               </span>
                             </span>
                           )}
@@ -617,75 +686,91 @@ export function ScheduleWizard({
               <Section
                 title="How much?"
                 description={
-                  isDef
-                    ? `DEF Top-Off is a flat service call — enter the top-off amount (up to ${DEF_MAX} gallons).`
-                    : showPrices
-                      ? "200-gallon minimum on off-road fuel. Your price appears the moment you type."
-                      : "200-gallon minimum on off-road fuel."
+                  showPrices
+                    ? "200-gallon minimum on diesel. Your price appears the moment you type."
+                    : "200-gallon minimum on diesel."
                 }
               >
-                <div className="flex flex-col gap-3 rounded-2xl bg-white p-5">
-                  <div className="flex items-end gap-3">
-                    <div className="flex-1">
-                      <label
-                        htmlFor="gallons"
-                        className="mb-1.5 block text-sm font-semibold text-text-primary"
-                      >
-                        Gallons {isDef && <span className="text-text-secondary">(max {DEF_MAX})</span>}
-                      </label>
-                      <input
-                        id="gallons"
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={gallonsInput}
-                        max={isDef ? DEF_MAX : undefined}
-                        onChange={(e) => {
-                          const digits = e.target.value.replace(/\D/g, "").slice(0, 6);
-                          if (isDef) {
-                            const n = Math.min(DEF_MAX, Number(digits) || 0);
-                            setGallonsInput(n ? String(n) : "");
-                          } else {
-                            setGallonsInput(digits);
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-3 rounded-2xl bg-white p-5">
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1">
+                        <label
+                          htmlFor="gallons"
+                          className="mb-1.5 block text-sm font-semibold text-text-primary"
+                        >
+                          Gallons
+                        </label>
+                        <input
+                          id="gallons"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={gallonsInput}
+                          onChange={(e) =>
+                            setGallonsInput(e.target.value.replace(/\D/g, "").slice(0, 6))
                           }
-                        }}
-                        disabled={!fuelType}
-                        className="w-full rounded-lg border border-grey-300 bg-white px-3 py-2.5 text-2xl font-bold text-text-primary outline-none transition-colors placeholder:text-text-disabled focus:border-primary disabled:opacity-50"
-                      />
+                          disabled={!fuelType}
+                          className="w-full rounded-lg border border-grey-300 bg-white px-3 py-2.5 text-2xl font-bold text-text-primary outline-none transition-colors placeholder:text-text-disabled focus:border-primary disabled:opacity-50"
+                        />
+                      </div>
+                      {showPrices && (
+                        <div className="pb-2 text-right">
+                          <p className="text-2xl font-bold text-primary">{money(cost.fuel)}</p>
+                          <p className="text-xs text-text-secondary">
+                            {gallons} gal × {money(ratePerGallon(fuelType))}/gal
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    {showPrices && (
-                      <div className="pb-2 text-right">
-                        <p className="text-2xl font-bold text-primary">{money(cost.fuel)}</p>
-                        <p className="text-xs text-text-secondary">
-                          {isDef
-                            ? `flat service · up to ${DEF_MAX} gal`
-                            : `${gallons} gal × ${money(OFF_ROAD_PRICE)}/gal`}
-                        </p>
+                    {cost.belowMinimum && (
+                      <div className="flex items-start gap-2 rounded-xl bg-secondary-lighter px-3 py-2.5 text-xs font-medium text-secondary-dark">
+                        <span aria-hidden>⚠</span>
+                        <span>
+                          Below the {OFF_ROAD_MIN}-gallon minimum — a
+                          {showPrices ? " $150 " : " "}small-order fee applies (per
+                          {showPrices ? " your" : ""} Service Agreement §4).
+                        </span>
                       </div>
                     )}
                   </div>
-                  {isDef && (
-                    <p className="text-xs text-text-secondary">
-                      Billed per visit regardless of the exact quantity dispensed, up to {DEF_MAX} gallons.
-                    </p>
-                  )}
-                  {!isDef && cost.belowMinimum && (
-                    <div className="flex items-start gap-2 rounded-xl bg-secondary-lighter px-3 py-2.5 text-xs font-medium text-secondary-dark">
-                      <span aria-hidden>⚠</span>
-                      <span>
-                        {showPrices ? (
-                          <>
-                            Below the {OFF_ROAD_MIN}-gallon minimum — a $150 small-order fee
-                            applies (per your Service Agreement §4).
-                          </>
-                        ) : (
-                          <>
-                            Below the {OFF_ROAD_MIN}-gallon minimum — a small-order fee applies
-                            (per Service Agreement §4).
-                          </>
-                        )}
+
+                  {/* DEF add-on — offered alongside the diesel, one flat rate. */}
+                  <button
+                    type="button"
+                    onClick={() => setAddDef((v) => !v)}
+                    className={`flex items-center gap-3 rounded-2xl border-2 p-4 text-left transition-colors ${
+                      addDef
+                        ? "border-primary bg-primary/8"
+                        : "border-transparent bg-white hover:border-grey-300"
+                    }`}
+                  >
+                    <span className="pt-0.5">
+                      <Checkbox
+                        checked={addDef}
+                        onChange={setAddDef}
+                        aria-label="Add a DEF top-off to this delivery"
+                      />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-text-primary">
+                        Add a DEF top-off
                       </span>
-                    </div>
-                  )}
+                      <span className="mt-0.5 block text-xs text-text-secondary">
+                        Diesel Exhaust Fluid topped off while we&apos;re on site — one flat charge,
+                        up to {DEF_MAX} gallons, no quantity to pick.
+                      </span>
+                    </span>
+                    {showPrices && (
+                      <span className="shrink-0 text-right">
+                        <span className="block text-lg font-bold text-text-primary">
+                          {money(DEF_FLAT)}
+                        </span>
+                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                          FLAT
+                        </span>
+                      </span>
+                    )}
+                  </button>
                 </div>
               </Section>
 
@@ -706,44 +791,130 @@ export function ScheduleWizard({
                 </div>
               </Section>
 
-              <Section title="Fuel Delivery Location" description="Where should we deliver the fuel?">
-                <div className="flex flex-col gap-4 rounded-2xl bg-white p-5">
-                  <div>
-                    <TextField
-                      id="zip"
-                      label="Zip Code"
-                      inputMode="numeric"
-                      placeholder="e.g. 33401"
-                      value={addr.zip}
-                      onChange={(e) => onZipChange(e.target.value)}
-                    />
-                    {zipStatus === "loading" && (
-                      <p className="mt-1 text-xs text-text-secondary">Looking up city &amp; state…</p>
+              {/* Address — the form until it's confirmed, then a compact summary
+                  with a change request behind a modal. */}
+              {addressCollapsible && addressConfirmed ? (
+                <Section title="Deliver to this address">
+                  <div className="rounded-2xl bg-white p-4 shadow-[var(--shadow-card)]">
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-success/16 text-success-dark">
+                        <LocationIcon size={18} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-text-primary">
+                          {addressLine}
+                        </p>
+                        <p className="text-xs text-text-secondary">
+                          {addr.notes.trim()
+                            ? addr.notes.trim()
+                            : "On file for your equipment."}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setAddressOpen((o) => !o)}
+                        className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-semibold text-primary hover:bg-primary/8"
+                      >
+                        {addressOpen ? "Hide" : "View"}
+                        <ChevronDownIcon
+                          size={16}
+                          className={`transition-transform ${addressOpen ? "rotate-180" : ""}`}
+                        />
+                      </button>
+                    </div>
+
+                    {addressOpen && (
+                      <dl className="mt-4 flex flex-col gap-2 border-t border-divider pt-4 text-sm">
+                        {[
+                          ["Street", `${addr.house} ${addr.street}`],
+                          ["City", addr.city],
+                          ["State", addr.state],
+                          ["ZIP", addr.zip || "—"],
+                          ["Country", addr.country],
+                          ["Access notes", addr.notes.trim() || "—"],
+                        ].map(([k, v]) => (
+                          <div key={k} className="flex justify-between gap-4">
+                            <dt className="text-text-secondary">{k}</dt>
+                            <dd className="text-right font-medium text-text-primary">{v}</dd>
+                          </div>
+                        ))}
+                      </dl>
                     )}
-                    {zipStatus === "error" && (
-                      <p className="mt-1 text-xs text-warning-dark">
-                        Couldn&apos;t find that ZIP — enter city &amp; state manually.
+
+                    {addressUnderReview && (
+                      <p className="mt-4 rounded-xl bg-secondary-lighter px-3 py-2.5 text-xs font-medium text-secondary-dark">
+                        {ADDRESS_REVIEW_NOTE}
                       </p>
                     )}
+
+                    <Button
+                      variant="soft"
+                      size="md"
+                      className="mt-4 w-full"
+                      onClick={() => {
+                        setDraftAddr(addr);
+                        setAddressModalOpen(true);
+                      }}
+                    >
+                      <PencilIcon size={16} />
+                      Request address change
+                    </Button>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <TextField id="house" label="House Number" value={addr.house} onChange={(e) => set("house", e.target.value)} />
-                    <TextField id="street" label="Street Name" value={addr.street} onChange={(e) => set("street", e.target.value)} />
+                </Section>
+              ) : (
+                <Section
+                  title={addressCollapsible ? "Deliver to this address" : "Fuel Delivery Location"}
+                  description="Where should we deliver the fuel?"
+                >
+                  <div className="flex flex-col gap-4 rounded-2xl bg-white p-5">
+                    <div>
+                      <TextField
+                        id="zip"
+                        label="Zip Code"
+                        inputMode="numeric"
+                        placeholder="e.g. 33401"
+                        value={addr.zip}
+                        onChange={(e) => onZipChange(e.target.value)}
+                      />
+                      {zipStatus === "loading" && (
+                        <p className="mt-1 text-xs text-text-secondary">Looking up city &amp; state…</p>
+                      )}
+                      {zipStatus === "error" && (
+                        <p className="mt-1 text-xs text-warning-dark">
+                          Couldn&apos;t find that ZIP — enter city &amp; state manually.
+                        </p>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <TextField id="house" label="House Number" value={addr.house} onChange={(e) => set("house", e.target.value)} />
+                      <TextField id="street" label="Street Name" value={addr.street} onChange={(e) => set("street", e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <TextField id="city" label="City" value={addr.city} onChange={(e) => set("city", e.target.value)} />
+                      <TextField id="state" label="State" value={addr.state} onChange={(e) => set("state", e.target.value)} />
+                    </div>
+                    <TextField id="country" label="Country" value={addr.country} onChange={(e) => set("country", e.target.value)} />
+                    <TextAreaField
+                      id="notes"
+                      label="Access Notes"
+                      placeholder="Please also provide information on how to access the equipment."
+                      value={addr.notes}
+                      onChange={(e) => set("notes", e.target.value)}
+                    />
+
+                    {addressCollapsible && (
+                      <Button
+                        size="lg"
+                        className="w-full"
+                        disabled={!addrValid}
+                        onClick={() => setAddressConfirmed(true)}
+                      >
+                        Confirm address
+                        <ArrowRightIcon size={20} />
+                      </Button>
+                    )}
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <TextField id="city" label="City" value={addr.city} onChange={(e) => set("city", e.target.value)} />
-                    <TextField id="state" label="State" value={addr.state} onChange={(e) => set("state", e.target.value)} />
-                  </div>
-                  <TextField id="country" label="Country" value={addr.country} onChange={(e) => set("country", e.target.value)} />
-                  <TextAreaField
-                    id="notes"
-                    label="Access Notes"
-                    placeholder="Please also provide information on how to access the equipment."
-                    value={addr.notes}
-                    onChange={(e) => set("notes", e.target.value)}
-                  />
-                </div>
-              </Section>
+                </Section>
+              )}
 
               <Section
                 title="Your Equipment"
@@ -890,11 +1061,13 @@ export function ScheduleWizard({
               <div className="flex justify-between gap-4">
                 <dt className="text-text-secondary">Quantity</dt>
                 <dd className="text-right font-semibold text-text-primary">
-                  {fuelType && gallons > 0
-                    ? isDef
-                      ? `${gallons} gal · flat service`
-                      : `${gallons} gal`
-                    : "—"}
+                  {fuelType && gallons > 0 ? `${gallons} gal` : "—"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-text-secondary">DEF top-off</dt>
+                <dd className="text-right font-semibold text-text-primary">
+                  {addDef ? `Added · up to ${DEF_MAX} gal` : "Not added"}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
@@ -929,11 +1102,17 @@ export function ScheduleWizard({
             {showPrices && fuelType && quantityOk && (
               <dl className="mt-4 flex flex-col gap-2 border-t border-divider pt-4 text-sm">
                 <div className="flex justify-between gap-4">
-                  <dt className="text-text-secondary">
-                    {isDef ? "DEF Top-Off — flat service" : `Fuel — ${gallons} gal`}
-                  </dt>
+                  <dt className="text-text-secondary">Fuel — {gallons} gal</dt>
                   <dd className="font-semibold text-text-primary">{money(cost.fuel)}</dd>
                 </div>
+                {cost.def > 0 && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-text-secondary">
+                      DEF top-off (up to {DEF_MAX} gal)
+                    </dt>
+                    <dd className="font-semibold text-text-primary">{money(cost.def)}</dd>
+                  </div>
+                )}
                 {cost.smallOrder > 0 && (
                   <div className="flex justify-between gap-4">
                     <dt className="text-text-secondary">Small-order fee (under {OFF_ROAD_MIN} gal)</dt>
@@ -946,13 +1125,24 @@ export function ScheduleWizard({
                     <dd className="font-semibold text-text-primary">{money(cost.urgency)}</dd>
                   </div>
                 )}
+                {/* Sales tax split into its state and county parts. */}
                 <div className="flex justify-between gap-4">
-                  <dt className="text-text-secondary">FL sales tax (6.5%)</dt>
+                  <dt className="text-text-secondary">Florida sales tax (6%)</dt>
                   <dd className="font-semibold text-text-primary">
                     {taxExempt === true ? (
                       <span className="text-success-dark">EXEMPT ✓</span>
                     ) : (
-                      money(cost.tax)
+                      money(cost.stateTax)
+                    )}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-text-secondary">Palm Beach County surtax (0.5%)</dt>
+                  <dd className="font-semibold text-text-primary">
+                    {taxExempt === true ? (
+                      <span className="text-success-dark">EXEMPT ✓</span>
+                    ) : (
+                      money(cost.countyTax)
                     )}
                   </dd>
                 </div>
@@ -967,6 +1157,13 @@ export function ScheduleWizard({
               <p className="mt-4 rounded-xl bg-secondary-lighter px-4 py-3 text-xs font-medium text-secondary-dark">
                 Confirm your details above to see your price.
               </p>
+            )}
+
+            {addressUnderReview && (
+              <div className="mt-4 flex items-start gap-2 rounded-xl bg-secondary-lighter px-4 py-3 text-xs font-medium text-secondary-dark">
+                <AlertTriangleIcon size={16} className="mt-0.5 shrink-0" />
+                <span>{ADDRESS_REVIEW_NOTE}</span>
+              </div>
             )}
 
             <div className="mt-5 flex gap-3">
@@ -997,6 +1194,86 @@ export function ScheduleWizard({
         }}
         location={addressLine}
       />
+
+      {/* Address change — the order can still go through, but under review. */}
+      <Modal
+        open={addressModalOpen}
+        onClose={() => setAddressModalOpen(false)}
+        title="Request address change"
+        footer={
+          <div className="flex w-full gap-3">
+            <Button variant="soft" size="lg" onClick={() => setAddressModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="lg"
+              className="flex-1"
+              disabled={!draftValid}
+              onClick={applyAddressChange}
+            >
+              Use this address
+              <ArrowRightIcon size={20} />
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4 py-2">
+          <div className="flex items-start gap-2 rounded-xl bg-secondary-lighter px-4 py-3 text-sm font-medium text-secondary-dark">
+            <AlertTriangleIcon size={18} className="mt-0.5 shrink-0" />
+            <span>{ADDRESS_REVIEW_NOTE}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <TextField
+              id="addr-house"
+              label="House Number"
+              value={draftAddr.house}
+              onChange={(e) => setDraft("house", e.target.value)}
+            />
+            <TextField
+              id="addr-street"
+              label="Street Name"
+              value={draftAddr.street}
+              onChange={(e) => setDraft("street", e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <TextField
+              id="addr-city"
+              label="City"
+              value={draftAddr.city}
+              onChange={(e) => setDraft("city", e.target.value)}
+            />
+            <TextField
+              id="addr-state"
+              label="State"
+              value={draftAddr.state}
+              onChange={(e) => setDraft("state", e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <TextField
+              id="addr-zip"
+              label="Zip Code"
+              inputMode="numeric"
+              value={draftAddr.zip}
+              onChange={(e) => setDraft("zip", e.target.value.replace(/\D/g, "").slice(0, 5))}
+            />
+            <TextField
+              id="addr-country"
+              label="Country"
+              value={draftAddr.country}
+              onChange={(e) => setDraft("country", e.target.value)}
+            />
+          </div>
+          <TextAreaField
+            id="addr-notes"
+            label="Access Notes"
+            placeholder="How should we access the equipment at this address?"
+            value={draftAddr.notes}
+            onChange={(e) => setDraft("notes", e.target.value)}
+          />
+        </div>
+      </Modal>
 
       {/* Guest flow: the order is what prompts them to create the account. */}
       <Modal
