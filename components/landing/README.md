@@ -31,6 +31,25 @@ actions — both defined in `content.ts`:
 "Access Account" collapses out of the nav below the `sm` breakpoint, so the
 footer carries it too — keep both if you rework the nav.
 
+## Two request flows, picked by `?v=`
+
+The landing's own query string decides where its Request Delivery CTAs point, so
+both flows can be demoed from one deploy by sending a different link:
+
+| Link | Request Delivery goes to | Flow |
+| --- | --- | --- |
+| `/` | `/login?next=schedule` | Sign in first, then the wizard |
+| `/?v=2` | `/customer-schedule?v=2` | Guest: straight into the wizard, no account |
+
+`RequestCta.tsx` reads the param and resolves it through `requestUrlFor()` in
+`content.ts`. Both CTAs sit under a Suspense boundary whose fallback is the
+default flow, which keeps this page statically prerendered.
+
+The guest flow itself lives in `ScheduleWizard` as `variant="guest"`: the
+agreement step also collects name + email, nothing below it unlocks until those
+are confirmed (pricing included), and Place Order asks the visitor to create an
+account before the delivery is booked.
+
 ## Theming
 
 Everything the landing renders reads from the `--l-*` semantic vars in
