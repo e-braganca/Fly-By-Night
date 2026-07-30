@@ -5,7 +5,6 @@ import { RequestButton, RequestLink } from "@/components/landing/RequestCta";
 import {
   PHONE,
   TEL,
-  SMS,
   SIGNIN_URL,
   NAV,
   TRUST,
@@ -26,7 +25,6 @@ import {
   NozzleIcon,
   DollarIcon,
   PhoneIcon,
-  ChatIcon,
 } from "@/components/landing/Icons";
 
 const SERVICE_ICONS = {
@@ -154,10 +152,6 @@ export function LandingPage() {
             <Button href={TEL} size="lg" variant="outline">
               <PhoneIcon size={18} />
               Call {PHONE}
-            </Button>
-            <Button href={SMS} size="lg" variant="outline">
-              <ChatIcon size={20} />
-              Message Us
             </Button>
           </div>
         </div>
