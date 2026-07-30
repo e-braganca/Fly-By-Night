@@ -1,11 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/landing/Button";
+import { RequestButton, RequestLink } from "@/components/landing/RequestCta";
 import {
   PHONE,
   TEL,
   SMS,
-  REQUEST_URL,
   SIGNIN_URL,
   NAV,
   TRUST,
@@ -118,9 +118,7 @@ export function LandingPage() {
                 Access Account
               </Button>
             </span>
-            <Button href={REQUEST_URL} size="md">
-              Request Delivery
-            </Button>
+            <RequestButton size="md">Request Delivery</RequestButton>
           </div>
         </div>
       </header>
@@ -148,10 +146,10 @@ export function LandingPage() {
             emergency call-out.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3.5">
-            <Button href={REQUEST_URL} size="lg">
+            <RequestButton size="lg">
               <GasStationIcon size={22} />
               Request a Delivery
-            </Button>
+            </RequestButton>
             {/* Icons inherit the button's text colour (accent on outline). */}
             <Button href={TEL} size="lg" variant="outline">
               <PhoneIcon size={18} />
@@ -404,9 +402,9 @@ export function LandingPage() {
               The name&apos;s a joke. Showing up on time, metering it right, and charging you fair — that
               part&apos;s dead serious.
             </p>
-            <Button href={REQUEST_URL} size="lg" className="mt-2">
+            <RequestButton size="lg" className="mt-2">
               Get Fuel Scheduled
-            </Button>
+            </RequestButton>
           </div>
         </div>
       </section>
@@ -448,12 +446,9 @@ export function LandingPage() {
               >
                 {PHONE}
               </a>
-              <Link
-                href={REQUEST_URL}
-                className="mb-2.5 block text-[14.5px] text-[var(--l-muted)] transition-colors hover:text-[var(--l-accent)]"
-              >
+              <RequestLink className="mb-2.5 block text-[14.5px] text-[var(--l-muted)] transition-colors hover:text-[var(--l-accent)]">
                 Request a Delivery
-              </Link>
+              </RequestLink>
               {/* Keeps sign-in reachable where the nav link collapses (mobile). */}
               <Link
                 href={SIGNIN_URL}

@@ -9,9 +9,12 @@ import type { UrgencyTier } from "@/lib/data/types";
 export function UrgencyPicker({
   value,
   onChange,
+  showFee = true,
 }: {
   value: UrgencyTier | null;
   onChange: (t: UrgencyTier) => void;
+  /** Guest request flow hides pricing until the visitor confirms who they are. */
+  showFee?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -21,6 +24,7 @@ export function UrgencyPicker({
           option={URGENCY_OPTIONS[t]}
           selected={value === t}
           onClick={() => onChange(t)}
+          showFee={showFee}
         />
       ))}
     </div>

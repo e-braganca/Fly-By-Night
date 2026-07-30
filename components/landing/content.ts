@@ -17,6 +17,16 @@ export const SMS =
 export const REQUEST_URL = "/login?next=schedule";
 export const SIGNIN_URL = "/login";
 
+/* Alternative request flow, reached by loading the landing as `/?v=2`: skip
+   sign-in entirely and go straight to the wizard, which then collects name +
+   email in place of an account. Lets both flows be demoed from one deploy. */
+export const REQUEST_URL_GUEST = "/customer-schedule?v=2";
+
+/** Which request flow this visitor gets, from the landing's own `?v=`. */
+export function requestUrlFor(variant: string | null): string {
+  return variant === "2" ? REQUEST_URL_GUEST : REQUEST_URL;
+}
+
 export const NAV = [
   { href: "#services", label: "Services" },
   { href: "#serve", label: "Who We Serve" },

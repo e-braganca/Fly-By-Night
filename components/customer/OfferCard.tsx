@@ -21,11 +21,14 @@ export function OfferCard({
   selected,
   highlight,
   onClick,
+  showFee = true,
 }: {
   option: UrgencyOption;
   selected?: boolean;
   highlight?: boolean;
   onClick?: () => void;
+  /** Guest request flow hides pricing until the visitor confirms who they are. */
+  showFee?: boolean;
 }) {
   const Icon = ICONS[option.icon];
   const active = selected || highlight;
@@ -60,18 +63,20 @@ export function OfferCard({
           {option.description}
         </p>
       </div>
-      <div className="text-right">
-        <p className={`text-xs ${active ? "text-primary" : "text-text-secondary"}`}>
-          fee
-        </p>
-        <p
-          className={`text-lg font-semibold ${
-            active ? "text-primary-darker" : "text-text-primary"
-          }`}
-        >
-          {feeLabel(option.fee)}
-        </p>
-      </div>
+      {showFee && (
+        <div className="text-right">
+          <p className={`text-xs ${active ? "text-primary" : "text-text-secondary"}`}>
+            fee
+          </p>
+          <p
+            className={`text-lg font-semibold ${
+              active ? "text-primary-darker" : "text-text-primary"
+            }`}
+          >
+            {feeLabel(option.fee)}
+          </p>
+        </div>
+      )}
     </button>
   );
 }
