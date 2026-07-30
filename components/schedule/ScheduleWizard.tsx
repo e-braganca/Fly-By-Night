@@ -734,43 +734,45 @@ export function ScheduleWizard({
                     )}
                   </div>
 
-                  {/* DEF add-on — offered alongside the diesel, one flat rate. */}
-                  <button
-                    type="button"
-                    onClick={() => setAddDef((v) => !v)}
-                    className={`flex items-center gap-3 rounded-2xl border-2 p-4 text-left transition-colors ${
-                      addDef
-                        ? "border-primary bg-primary/8"
-                        : "border-transparent bg-white hover:border-grey-300"
-                    }`}
-                  >
-                    <span className="pt-0.5">
-                      <Checkbox
-                        checked={addDef}
-                        onChange={setAddDef}
-                        aria-label="Add a DEF top-off to this delivery"
-                      />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-text-primary">
-                        Add a DEF top-off
+                  {/* DEF add-on — only offered once there's a diesel to add it to. */}
+                  {fuelType && (
+                    <button
+                      type="button"
+                      onClick={() => setAddDef((v) => !v)}
+                      className={`flex items-center gap-3 rounded-2xl border-2 p-4 text-left transition-colors ${
+                        addDef
+                          ? "border-primary bg-primary/8"
+                          : "border-transparent bg-white hover:border-grey-300"
+                      }`}
+                    >
+                      <span className="pt-0.5">
+                        <Checkbox
+                          checked={addDef}
+                          onChange={setAddDef}
+                          aria-label="Add a DEF top-off to this delivery"
+                        />
                       </span>
-                      <span className="mt-0.5 block text-xs text-text-secondary">
-                        Diesel Exhaust Fluid topped off while we&apos;re on site — one flat charge,
-                        up to {DEF_MAX} gallons, no quantity to pick.
-                      </span>
-                    </span>
-                    {showPrices && (
-                      <span className="shrink-0 text-right">
-                        <span className="block text-lg font-bold text-text-primary">
-                          {money(DEF_FLAT)}
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-text-primary">
+                          Add a DEF top-off
                         </span>
-                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                          FLAT
+                        <span className="mt-0.5 block text-xs text-text-secondary">
+                          Diesel Exhaust Fluid topped off while we&apos;re on site — one flat
+                          charge, up to {DEF_MAX} gallons, no quantity to pick.
                         </span>
                       </span>
-                    )}
-                  </button>
+                      {showPrices && (
+                        <span className="shrink-0 text-right">
+                          <span className="block text-lg font-bold text-text-primary">
+                            {money(DEF_FLAT)}
+                          </span>
+                          <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                            FLAT
+                          </span>
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </div>
               </Section>
 
