@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { Modal } from "@/components/ui/Modal";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { TextField, TextAreaField } from "@/components/ui/Field";
 import { EquipmentModal } from "@/components/customer/EquipmentModal";
@@ -28,7 +29,7 @@ import {
   ChevronDownIcon,
   LockIcon,
   DropletIcon,
-  ReceiptIcon,
+  EyeIcon,
 } from "@/components/ui/Icon";
 import {
   URGENCY_OPTIONS,
@@ -114,6 +115,15 @@ function Section({
 }
 
 export type ScheduleWizardProps = {
+  /**
+   * `default` — the signed-in flow: the visitor authenticated first, so pricing
+   * is visible from the start and Place Order books the delivery.
+   * `guest` — reached straight from the landing without an account. The
+   * agreement step also collects name + email, nothing below it (pricing
+   * included) is revealed until those are confirmed, and Place Order asks them
+   * to create an account before the booking goes through.
+   */
+  variant?: "default" | "guest";
   /** Admin mode: pass the customer directory to enable the customer step. */
   customers?: CustomerAccount[];
   /** Address prefill (customer/self mode). */
@@ -133,6 +143,7 @@ export type ScheduleWizardProps = {
 };
 
 export function ScheduleWizard({
+  variant = "default",
   customers,
   defaultAddress,
   cancelHref,
@@ -151,10 +162,24 @@ export function ScheduleWizard({
   const certRef = useRef<HTMLInputElement>(null);
 
   const isCustomer = !customers;
-  // Captured once so checking the box doesn't swap the full agreement out mid-flow.
-  const [firstTime] = useState(isCustomer && !agreementSigned);
-  const [accepted, setAccepted] = useState(!isCustomer || agreementSigned);
+  const isGuest = variant === "guest";
+  // A guest hasn't signed anything yet, so they always get the full agreement.
+  // Captured once so checking the box doesn't swap it out mid-flow.
+  const [firstTime] = useState(isGuest || (isCustomer && !agreementSigned));
+  const [accepted, setAccepted] = useState(
+    isGuest ? false : !isCustomer || agreementSigned,
+  );
   const [reviewing, setReviewing] = useState(false);
+
+  /* Guest flow: who they are, collected alongside the agreement. Confirming
+     these is what unlocks the rest of the form — and the pricing. */
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [detailsConfirmed, setDetailsConfirmed] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [accountPassword, setAccountPassword] = useState("");
+  const [showAccountPw, setShowAccountPw] = useState(false);
 
   const [done, setDone] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -176,10 +201,16 @@ export function ScheduleWizard({
   const [taxExempt, setTaxExempt] = useState<boolean | null>(
     business.dr97 ? true : null,
   );
-  // Payment (charged on completed delivery).
-  const [card, setCard] = useState({ number: "", expiry: "", cvc: "" });
 
-  const gated = isCustomer && !accepted;
+  /* Guests must accept AND confirm their details; signed-in users just accept. */
+  const guestDetailsValid =
+    firstName.trim().length > 0 &&
+    lastName.trim().length > 0 &&
+    /\S+@\S+\.\S+/.test(guestEmail.trim());
+  const canConfirmDetails = accepted && guestDetailsValid;
+  const gated = isGuest ? !detailsConfirmed : isCustomer && !accepted;
+  /* Nothing is priced for a guest until we know who's asking. */
+  const showPrices = !isGuest || detailsConfirmed;
 
   const addressLine = `${addr.house} ${addr.street}, ${addr.city}, ${addr.state}`;
   const rule = tier ? URGENCY_SCHEDULE[tier] : null;
@@ -214,7 +245,7 @@ export function ScheduleWizard({
       win &&
       addrValid &&
       chosen.length > 0 &&
-      (isCustomer ? accepted : customer),
+      (isGuest ? detailsConfirmed : isCustomer ? accepted : customer),
   );
 
   const set = <K extends keyof AddressForm>(k: K, v: string) =>
@@ -263,7 +294,10 @@ export function ScheduleWizard({
 
   function acceptAgreement(v: boolean) {
     setAccepted(v);
-    if (v) signAgreement();
+    // A guest has no account to attach the signature to yet — it's recorded
+    // when they create one in `createAccountAndPlace`. Writing to the store
+    // here would also churn this component mid-flow and drop local state.
+    if (v && !isGuest) signAgreement();
   }
 
   function onPickCert(e: React.ChangeEvent<HTMLInputElement>) {
@@ -296,6 +330,14 @@ export function ScheduleWizard({
         : undefined,
     });
     setDone(true);
+  }
+
+  /** Guest flow: the account is created as part of placing the first order. */
+  function createAccountAndPlace() {
+    if (accountPassword.length === 0) return;
+    signAgreement();
+    setAccountOpen(false);
+    finish();
   }
 
   /* ---- Confirmation (blue) ---- */
@@ -399,6 +441,83 @@ export function ScheduleWizard({
                     authorized to bind the customer. No delivery is made until this is accepted.
                   </span>
                 </label>
+
+                {/* Guest flow: we don't know who this is yet, so collect it here.
+                    Confirming unlocks the rest of the form and the pricing. */}
+                {isGuest && (
+                  <div className="mt-5 border-t border-divider pt-5">
+                    <p className="text-sm font-semibold text-text-primary">Who are we quoting?</p>
+                    <p className="mt-0.5 text-xs text-text-secondary">
+                      We&apos;ll show your price once we know who&apos;s asking.
+                    </p>
+                    <div className="mt-4 flex flex-col gap-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <TextField
+                          id="guest-first-name"
+                          label="First name"
+                          required
+                          placeholder="Zoe"
+                          value={firstName}
+                          disabled={detailsConfirmed}
+                          onChange={(e) => setFirstName(e.target.value)}
+                        />
+                        <TextField
+                          id="guest-last-name"
+                          label="Last name"
+                          required
+                          placeholder="Harris"
+                          value={lastName}
+                          disabled={detailsConfirmed}
+                          onChange={(e) => setLastName(e.target.value)}
+                        />
+                      </div>
+                      <TextField
+                        id="guest-email"
+                        label="Email address"
+                        required
+                        type="email"
+                        placeholder="zoe@company.com"
+                        value={guestEmail}
+                        disabled={detailsConfirmed}
+                        onChange={(e) => setGuestEmail(e.target.value)}
+                      />
+                    </div>
+
+                    {detailsConfirmed ? (
+                      <div className="mt-4 flex items-center gap-3 rounded-xl bg-success/8 px-4 py-3">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-success/16 text-success-dark">
+                          <CheckIcon size={16} />
+                        </span>
+                        <p className="min-w-0 flex-1 text-sm text-text-primary">
+                          Thanks, <span className="font-semibold">{firstName}</span> — your pricing is
+                          unlocked below.
+                        </p>
+                        <Button
+                          variant="soft"
+                          size="sm"
+                          onClick={() => setDetailsConfirmed(false)}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="lg"
+                        className="mt-4 w-full"
+                        disabled={!canConfirmDetails}
+                        onClick={() => setDetailsConfirmed(true)}
+                      >
+                        Confirm my details
+                        <ArrowRightIcon size={20} />
+                      </Button>
+                    )}
+                    {!accepted && guestDetailsValid && (
+                      <p className="mt-2 text-xs font-medium text-secondary-dark">
+                        Accept the Service Agreement above to continue.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </Section>
           )}
@@ -436,7 +555,9 @@ export function ScheduleWizard({
             {gated && (
               <div className="mb-6 flex items-center gap-2 rounded-xl bg-secondary-lighter px-4 py-3 text-sm font-semibold text-secondary-dark">
                 <LockIcon size={18} className="shrink-0" />
-                Accept the Service Agreement above to continue.
+                {isGuest
+                  ? "Accept the agreement and confirm your details above to see pricing and continue."
+                  : "Accept the Service Agreement above to continue."}
               </div>
             )}
 
@@ -472,14 +593,16 @@ export function ScheduleWizard({
                           >
                             <DropletIcon size={20} />
                           </span>
-                          <span className="text-right">
-                            <span className="block text-lg font-bold text-text-primary">
-                              {money(f.price)}
+                          {showPrices && (
+                            <span className="text-right">
+                              <span className="block text-lg font-bold text-text-primary">
+                                {money(f.price)}
+                              </span>
+                              <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                                {f.badge}
+                              </span>
                             </span>
-                            <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                              {f.badge}
-                            </span>
-                          </span>
+                          )}
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-text-primary">{f.name}</p>
@@ -496,7 +619,9 @@ export function ScheduleWizard({
                 description={
                   isDef
                     ? `DEF Top-Off is a flat service call — enter the top-off amount (up to ${DEF_MAX} gallons).`
-                    : "200-gallon minimum on off-road fuel. Your price appears the moment you type."
+                    : showPrices
+                      ? "200-gallon minimum on off-road fuel. Your price appears the moment you type."
+                      : "200-gallon minimum on off-road fuel."
                 }
               >
                 <div className="flex flex-col gap-3 rounded-2xl bg-white p-5">
@@ -527,14 +652,16 @@ export function ScheduleWizard({
                         className="w-full rounded-lg border border-grey-300 bg-white px-3 py-2.5 text-2xl font-bold text-text-primary outline-none transition-colors placeholder:text-text-disabled focus:border-primary disabled:opacity-50"
                       />
                     </div>
-                    <div className="pb-2 text-right">
-                      <p className="text-2xl font-bold text-primary">{money(cost.fuel)}</p>
-                      <p className="text-xs text-text-secondary">
-                        {isDef
-                          ? `flat service · up to ${DEF_MAX} gal`
-                          : `${gallons} gal × ${money(OFF_ROAD_PRICE)}/gal`}
-                      </p>
-                    </div>
+                    {showPrices && (
+                      <div className="pb-2 text-right">
+                        <p className="text-2xl font-bold text-primary">{money(cost.fuel)}</p>
+                        <p className="text-xs text-text-secondary">
+                          {isDef
+                            ? `flat service · up to ${DEF_MAX} gal`
+                            : `${gallons} gal × ${money(OFF_ROAD_PRICE)}/gal`}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   {isDef && (
                     <p className="text-xs text-text-secondary">
@@ -545,8 +672,17 @@ export function ScheduleWizard({
                     <div className="flex items-start gap-2 rounded-xl bg-secondary-lighter px-3 py-2.5 text-xs font-medium text-secondary-dark">
                       <span aria-hidden>⚠</span>
                       <span>
-                        Below the {OFF_ROAD_MIN}-gallon minimum — a $150 small-order fee
-                        applies (per your Service Agreement §4).
+                        {showPrices ? (
+                          <>
+                            Below the {OFF_ROAD_MIN}-gallon minimum — a $150 small-order fee
+                            applies (per your Service Agreement §4).
+                          </>
+                        ) : (
+                          <>
+                            Below the {OFF_ROAD_MIN}-gallon minimum — a small-order fee applies
+                            (per Service Agreement §4).
+                          </>
+                        )}
                       </span>
                     </div>
                   )}
@@ -554,7 +690,7 @@ export function ScheduleWizard({
               </Section>
 
               <Section title="How urgent is the delivery?" description="Choose how quickly you need this fuel delivery.">
-                <UrgencyPicker value={tier} onChange={chooseTier} />
+                <UrgencyPicker value={tier} onChange={chooseTier} showFee={showPrices} />
               </Section>
 
               <Section title="When do you want the delivery?" description="Select the date and time slot for the delivery.">
@@ -738,63 +874,6 @@ export function ScheduleWizard({
                 </div>
               </Section>
 
-              <Section
-                title="Payment"
-                description="Charged on completed delivery. No pre-auth games."
-              >
-                <div className="flex flex-col gap-4 rounded-2xl bg-white p-5">
-                  <div>
-                    <label
-                      htmlFor="card-number"
-                      className="mb-1.5 block text-sm font-semibold text-text-primary"
-                    >
-                      Card number
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="card-number"
-                        inputMode="numeric"
-                        placeholder="1234 5678 9012 3456"
-                        value={card.number}
-                        onChange={(e) => {
-                          const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
-                          const grouped = digits.replace(/(.{4})/g, "$1 ").trim();
-                          setCard((c) => ({ ...c, number: grouped }));
-                        }}
-                        className="w-full rounded-lg border border-grey-300 bg-white px-3 py-2.5 pr-10 text-sm text-text-primary outline-none transition-colors placeholder:text-text-disabled focus:border-primary"
-                      />
-                      <ReceiptIcon
-                        size={18}
-                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-grey-500"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <TextField
-                      id="card-expiry"
-                      label="Expiry"
-                      placeholder="MM/YY"
-                      inputMode="numeric"
-                      value={card.expiry}
-                      onChange={(e) => {
-                        const d = e.target.value.replace(/\D/g, "").slice(0, 4);
-                        const v = d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
-                        setCard((c) => ({ ...c, expiry: v }));
-                      }}
-                    />
-                    <TextField
-                      id="card-cvc"
-                      label="CVC"
-                      placeholder="123"
-                      inputMode="numeric"
-                      value={card.cvc}
-                      onChange={(e) =>
-                        setCard((c) => ({ ...c, cvc: e.target.value.replace(/\D/g, "").slice(0, 4) }))
-                      }
-                    />
-                  </div>
-                </div>
-              </Section>
             </div>
           </div>
 
@@ -832,7 +911,9 @@ export function ScheduleWizard({
                 <dt className="text-text-secondary">Urgency</dt>
                 <dd className="text-right font-semibold text-text-primary">
                   {tier
-                    ? `${URGENCY_OPTIONS[tier].title} · ${feeLabel(URGENCY_OPTIONS[tier].fee)}`
+                    ? showPrices
+                      ? `${URGENCY_OPTIONS[tier].title} · ${feeLabel(URGENCY_OPTIONS[tier].fee)}`
+                      : URGENCY_OPTIONS[tier].title
                     : "—"}
                 </dd>
               </div>
@@ -844,8 +925,8 @@ export function ScheduleWizard({
               </div>
             </dl>
 
-            {/* Cost breakdown */}
-            {fuelType && quantityOk && (
+            {/* Cost breakdown — withheld from a guest until they identify themselves */}
+            {showPrices && fuelType && quantityOk && (
               <dl className="mt-4 flex flex-col gap-2 border-t border-divider pt-4 text-sm">
                 <div className="flex justify-between gap-4">
                   <dt className="text-text-secondary">
@@ -882,11 +963,22 @@ export function ScheduleWizard({
               </dl>
             )}
 
+            {!showPrices && (
+              <p className="mt-4 rounded-xl bg-secondary-lighter px-4 py-3 text-xs font-medium text-secondary-dark">
+                Confirm your details above to see your price.
+              </p>
+            )}
+
             <div className="mt-5 flex gap-3">
               <Button variant="soft" size="lg" onClick={() => router.push(cancelHref)}>
                 Cancel
               </Button>
-              <Button size="lg" className="flex-1" disabled={!canPlace} onClick={finish}>
+              <Button
+                size="lg"
+                className="flex-1"
+                disabled={!canPlace}
+                onClick={() => (isGuest ? setAccountOpen(true) : finish())}
+              >
                 Place Order
                 <ArrowRightIcon size={20} />
               </Button>
@@ -905,6 +997,76 @@ export function ScheduleWizard({
         }}
         location={addressLine}
       />
+
+      {/* Guest flow: the order is what prompts them to create the account. */}
+      <Modal
+        open={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        title="Create your account to place your order"
+        footer={
+          <div className="flex w-full gap-3">
+            <Button variant="soft" size="lg" onClick={() => setAccountOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="lg"
+              className="flex-1"
+              disabled={accountPassword.length === 0}
+              onClick={createAccountAndPlace}
+            >
+              Create account &amp; place order
+              <ArrowRightIcon size={20} />
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4 py-2">
+          <p className="text-sm text-text-secondary">
+            We&apos;ll use these to send your delivery ticket and invoice. Just pick a password
+            and your order is in.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField
+              id="account-first-name"
+              label="First name"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+            />
+            <TextField
+              id="account-last-name"
+              label="Last name"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+            />
+          </div>
+          <TextField
+            id="account-email"
+            label="Email address"
+            type="email"
+            value={guestEmail}
+            onChange={(e) => setGuestEmail(e.target.value)}
+          />
+          <div className="relative">
+            <TextField
+              id="account-password"
+              label="Password"
+              type={showAccountPw ? "text" : "password"}
+              placeholder="Choose a password"
+              autoComplete="new-password"
+              value={accountPassword}
+              onChange={(e) => setAccountPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              aria-label={showAccountPw ? "Hide password" : "Show password"}
+              onClick={() => setShowAccountPw((s) => !s)}
+              className="absolute right-2 top-[30px] grid h-9 w-9 place-items-center rounded-full text-grey-600 hover:bg-grey-500/8"
+            >
+              <EyeIcon size={20} />
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
