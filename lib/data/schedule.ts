@@ -185,6 +185,12 @@ export function isWeekday(iso: string): boolean {
   return dow >= 1 && dow <= 5;
 }
 
+/** Monday–Saturday. We never deliver on a Sunday, whatever the urgency. */
+export function isNotSunday(iso: string): boolean {
+  const { y, m, d } = parseISO(iso);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay() !== 0;
+}
+
 export type DeliveryWindowName = "Morning" | "Afternoon" | "Evening";
 
 /**
@@ -199,7 +205,11 @@ export const URGENCY_SCHEDULE: Record<
 > = {
   standard: { allowsDay: isWeekday, windows: ["Morning", "Afternoon"] },
   after_hours_weekend: { allowsDay: isWeekday, windows: ["Evening"] },
-  emergency_call_out: { allowsDay: () => true, windows: ["Morning", "Afternoon", "Evening"] },
+  // Emergency reaches Saturdays and any window — but never a Sunday.
+  emergency_call_out: {
+    allowsDay: isNotSunday,
+    windows: ["Morning", "Afternoon", "Evening"],
+  },
 };
 
 /**
