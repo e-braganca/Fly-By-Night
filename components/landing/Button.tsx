@@ -9,11 +9,12 @@ import type { ButtonHTMLAttributes, AnchorHTMLAttributes, ReactNode } from "reac
 */
 
 type Variant = "accent" | "outline" | "ghost";
-type Size = "md" | "lg";
+type Size = "sm" | "md" | "lg";
 
-/* Sizes mirror the Figma Button component: 16px horizontal padding, 8px gap,
-   15px semibold label, 36px (md) / 48px (lg) tall. */
+/* Sizes mirror the Figma Button component: 8px (sm) / 16px horizontal padding,
+   8px gap, and 30px (sm) / 36px (md) / 48px (lg) tall. */
 const sizes: Record<Size, string> = {
+  sm: "h-[30px] px-2 text-[13px] gap-2",
   md: "h-9 px-4 text-sm gap-2",
   lg: "h-12 px-4 text-[15px] gap-2",
 };

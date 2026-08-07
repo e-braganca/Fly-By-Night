@@ -11,19 +11,21 @@
   --l-page: #f4f6f8; /* neutral */
   --l-surface: #ffffff; /* paper */
   --l-surface-2: #f9fafb; /* grey-100 */
-  --l-surface-deep: #eef1f6;
+  --l-surface-deep: #dfe3e8; /* grey-300 — footer band */
   --l-heading: #161c24; /* ink */
-  --l-text: #454f5b; /* grey-700 */
+  --l-text: #212b36; /* grey-800 */
   --l-muted: #637381; /* text-secondary */
   --l-accent: #3960d5; /* primary */
   --l-accent-strong: #1f3d93;
   --l-accent-soft: rgba(57, 96, 213, 0.1);
   --l-on-accent: #ffffff;
-  --l-border: rgba(145, 158, 171, 0.24);
+  --l-border: rgba(145, 158, 171, 0.2);
   /* Outline-button border — primary/main at 48%, per the Figma Button component. */
-  --l-accent-border: rgba(57, 96, 213, 0.48);
-  --l-hero-glow: radial-gradient(1000px 460px at 50% -8%, rgba(57, 96, 213, 0.12), transparent 60%),
-    radial-gradient(760px 520px at 82% 10%, rgba(248, 201, 74, 0.28), transparent 62%);
+  --l-accent-border: rgba(48, 92, 222, 0.48);
+  /* Compliance card + shield tile tints. */
+  --l-accent-tile: rgba(48, 92, 222, 0.12);
+  --l-accent-tile-border: rgba(48, 92, 222, 0.32);
+  --l-accent-card-border: rgba(48, 92, 222, 0.2);
 }
 
 /* Smooth-scroll for the landing's in-page nav anchors, and offset the targets

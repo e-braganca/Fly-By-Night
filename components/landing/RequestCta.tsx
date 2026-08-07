@@ -17,7 +17,7 @@ import { REQUEST_URL, requestUrlFor } from "@/components/landing/content";
 */
 
 type ButtonProps = {
-  size?: "md" | "lg";
+  size?: "sm" | "md" | "lg";
   variant?: "accent" | "outline" | "ghost";
   className?: string;
   children: ReactNode;

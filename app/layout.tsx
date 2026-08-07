@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Oswald } from "next/font/google";
+import { Inter, Oswald, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -14,6 +14,12 @@ const oswald = Oswald({
   subsets: ["latin"],
 });
 
+// Monospace accent used by the landing's promise + compliance titles.
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
   title: "Fly by Night Fuel",
   description: "Diesel delivered. Day or night.",
@@ -25,7 +31,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${oswald.variable} h-full`}>
+    <html
+      lang="en"
+      className={`${inter.variable} ${oswald.variable} ${geistMono.variable} h-full`}
+    >
       <body className="min-h-full">{children}</body>
     </html>
   );

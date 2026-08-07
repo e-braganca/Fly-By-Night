@@ -65,6 +65,8 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   /* Display face — used by the marketing landing's headlines. */
   --font-display: var(--font-oswald), var(--font-inter), ui-sans-serif, sans-serif;
+  /* Monospace accent — the landing's promise + compliance titles. */
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
 
   /* ---- Shadows (Minimal-style) ---- */
   --shadow-card: 0 0 2px 0 rgba(145, 158, 171, 0.2), 0 12px 24px -4px rgba(145, 158, 171, 0.12);

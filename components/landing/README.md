@@ -63,16 +63,27 @@ so they can never leak into the app shell. To add a dark variant, add a
 
 If you lift this folder out, these come with it:
 
-- **Assets** — `public/landing/*` (segment photos + `coverage-map.png`) and
-  `public/brand/*` (`logo-horizontal.svg`, `vertical.svg`).
-- **Fonts** — `--font-display` (Oswald) and `--font-sans` (Inter), registered in
-  `app/layout.tsx` and mapped in the `@theme` block of `app/globals.css`.
+- **Assets** — `public/landing/*` (`hero-emblem.jpg`, the six `seg-*.jpg` service
+  photos, `alex.jpg`, `coverage-map.png`) and `public/brand/logo-horizontal.svg`.
+- **Fonts** — `--font-sans` (Inter) for everything, plus `--font-mono`
+  (Geist Mono) for the pricing-promise and compliance titles. Both are
+  registered in `app/layout.tsx` and mapped in the `@theme` block of
+  `app/globals.css`. The landing no longer uses `--font-display` (Oswald) —
+  headings are Inter Bold.
 - **Tokens** — `--radius-card`, `--radius-btn` from `app/globals.css`.
 - **CSS import** — `app/globals.css` imports `landing.css`.
 
 Nothing else in the app imports from this folder, and this folder imports
 nothing from the app besides `next/image` and `next/link`.
 
+## Known deviation from the mock
+
+The service-card descriptions are specified in **Author** (a commercial face the
+app doesn't ship). They render in Inter, which is wider, so each description
+takes one extra line and the cards come out ~495px tall against the mock's 440px.
+All six stay equal height. Closing the gap means licensing Author or dropping
+that copy to ~15px — deliberately left at the spec'd 16px.
+
 ## Design source
 
-Figma — *Fueling Around*, frame `Landing — Fly by Night Fuel` (node `18448:1469`).
+Figma — *Fueling Around*, frame `Landing — Fly by Night Fuel` (node `18577:95364`).
