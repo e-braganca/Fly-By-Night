@@ -76,6 +76,26 @@ If you lift this folder out, these come with it:
 Nothing else in the app imports from this folder, and this folder imports
 nothing from the app besides `next/image` and `next/link`.
 
+## Handing the landing to a static host
+
+The client may want the landing hosted on its own, away from the app. Rather than
+maintaining a second copy, export one:
+
+```bash
+npm run build && npm run export:landing
+```
+
+`scripts/export-landing.mjs` turns the prerendered `/` into a plain
+`index.html` + `styles.css` + `script.js` + `fonts/` + `assets/` package with no
+framework and no build step, written to `../../fly-by-night-landing-static`. It
+strips the React runtime, replaces `next/image` with plain `<img>` tags, rehomes
+the self-hosted fonts, and points the account links at `APP_ORIGIN` (set at the
+top of the script — update it if the app moves).
+
+Because the export is generated from the build, this folder stays the single
+source of truth: change the landing here and re-export. `scripts/landing-static/`
+holds the `script.js` and `README.md` that ship inside the package.
+
 ## Known deviation from the mock
 
 The service-card descriptions are specified in **Author** (a commercial face the
