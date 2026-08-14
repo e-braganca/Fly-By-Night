@@ -204,5 +204,5 @@ export const OWNER = {
     "Now I want to bring all my training, certifications, and skills to you in the great state of Florida.",
     "I've worked on and fueled up thousands of machines over the years, and now I'm ready to bring that same energy and success to your business. Let us know how we can help fuel your business forward today.",
   ],
-  tail: "The name's a joke. Showing up on time, metering it right, and charging you fair — that part's dead serious.",
+  tail: "The name's a joke. Showing up on time, metering it right, and charging you fairly — that part's dead serious.",
 };
