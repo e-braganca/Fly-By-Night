@@ -43,3 +43,21 @@
     scroll-behavior: auto;
   }
 }
+
+/* FAQ disclosures. The chevron flip lives here rather than on a
+   `group-open:rotate-180` utility: that variant isn't emitted by this Tailwind
+   build, so the rotation applied in both states. Plain unlayered CSS is also
+   immune to utility-layer ordering. */
+[data-landing-theme] details[data-faq] > summary > svg {
+  transition: rotate 200ms ease;
+}
+
+[data-landing-theme] details[data-faq][open] > summary > svg {
+  rotate: 180deg;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-landing-theme] details[data-faq] > summary > svg {
+    transition: none;
+  }
+}

@@ -28,6 +28,7 @@ import {
   PhoneIcon,
   ShieldCheckIcon,
   ArrowRightIcon,
+  ChevronDownIcon,
 } from "@/components/landing/Icons";
 
 const TRUST_ICONS = {
@@ -399,18 +400,23 @@ export function LandingPage() {
       <section className="bg-[var(--l-surface)] px-6 pb-[78px] pt-12">
         <div className="mx-auto flex max-w-[1140px] flex-col gap-[46px]">
           <SectionHeading eyebrow="Common Questions" lead="Straight answers," accent="no runaround" />
+          {/* Native <details> so the page stays a server component: closed by
+              default, keyboard-operable, and searchable by the browser's own
+              find-in-page, with no hydration cost. */}
           <div className="mx-auto flex w-full max-w-[820px] flex-col gap-3.5">
             {FAQ.map((qa) => (
-              <div
+              <details
                 key={qa.q}
-                className="rounded-[14px] border border-[var(--l-border)] bg-[var(--l-page)] px-[22px] py-5"
+                data-faq
+                className="rounded-[14px] border border-[var(--l-border)] bg-[var(--l-page)] px-[22px] open:border-[var(--l-accent-border)]"
               >
-                <h3 className="mb-2 flex gap-2.5 text-[17px] font-semibold text-[var(--l-heading)]">
+                <summary className="flex cursor-pointer list-none items-start gap-2.5 py-5 text-[17px] font-semibold text-[var(--l-heading)] [&::-webkit-details-marker]:hidden">
                   <span className="font-bold text-[var(--l-accent)]">Q</span>
-                  {qa.q}
-                </h3>
-                <p className="text-[15px] leading-[1.6] text-[var(--l-muted)]">{qa.a}</p>
-              </div>
+                  <span className="flex-1">{qa.q}</span>
+                  <ChevronDownIcon className="mt-0.5 shrink-0 text-[var(--l-accent)]" />
+                </summary>
+                <p className="pb-5 text-[15px] leading-[1.6] text-[var(--l-muted)]">{qa.a}</p>
+              </details>
             ))}
           </div>
         </div>
