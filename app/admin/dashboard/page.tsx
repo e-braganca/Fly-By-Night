@@ -13,7 +13,7 @@ import {
   AdminDeliveryCard,
   EmptySlot,
 } from "@/components/admin/AdminDeliveryCard";
-import { CompleteFuelingDrawer } from "@/components/admin/CompleteFuelingDrawer";
+import { FuelingFlow } from "@/components/admin/FuelingFlow";
 import { PAGE_X, PAGE_Y } from "@/components/ui/layout";
 import { useAppStore } from "@/lib/store";
 import {
@@ -27,7 +27,7 @@ import {
   type BoardColumn,
 } from "@/lib/data/admin";
 
-// Banner step whose action ("Start Fueling") opens the Complete Fueling drawer.
+// Banner step whose action ("Start Fueling") opens the fueling flow.
 const START_FUELING_STEP = BANNER_STEPS.findIndex((s) => s.key === "on_scene");
 
 export default function AdminDashboard() {
@@ -244,13 +244,15 @@ export default function AdminDashboard() {
         destructive={false}
       />
 
-      <CompleteFuelingDrawer
-        open={fuelingOpen}
-        onClose={() => setFuelingOpen(false)}
-        onComplete={completeFueling}
-        address={nextAddress}
-        equipment={nextEquipment}
-      />
+      {/* Mounted only while a run is in progress, so each run starts clean. */}
+      {fuelingOpen && (
+        <FuelingFlow
+          onClose={() => setFuelingOpen(false)}
+          onComplete={completeFueling}
+          address={nextAddress}
+          equipment={nextEquipment}
+        />
+      )}
     </div>
   );
 }
