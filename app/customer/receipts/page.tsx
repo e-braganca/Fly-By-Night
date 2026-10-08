@@ -65,7 +65,7 @@ export default function ReceiptsPage() {
   const rangeEnd = Math.min(start + pageSize, filtered.length);
 
   return (
-    <PageContainer maxWidth={1200}>
+    <PageContainer maxWidth="full" fill>
       <PageHeader title="Receipts" />
 
       {/* Search */}
@@ -95,7 +95,7 @@ export default function ReceiptsPage() {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div className="flex-1 overflow-x-auto">
         <div className="min-w-[820px]">
           {/* Header */}
           <div
