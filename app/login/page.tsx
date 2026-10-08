@@ -15,21 +15,25 @@ import {
   readNext,
 } from "@/components/auth/AuthShell";
 
-/* Admin is not a visible choice — the sign-in form is the same for everyone.
-   For the demo, an @flybynight / "admin" address lands on the admin app so
-   both sides stay reachable without putting a role switch in the UI. */
-function looksLikeAdmin(email: string): boolean {
-  return /admin/i.test(email);
-}
+/* Which app the credentials sign into. The demo has no real auth, so the
+   choice is explicit rather than inferred from the address — picking "Admin"
+   is the only way to reach the admin app. */
+type Role = "customer" | "admin";
+
+const ROLES: { id: Role; label: string }[] = [
+  { id: "customer", label: "Customer" },
+  { id: "admin", label: "Admin" },
+];
 
 export default function LoginPage() {
   const router = useRouter();
+  const [role, setRole] = useState<Role>("customer");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
 
   function login() {
-    router.push(destinationFor(readNext(), looksLikeAdmin(email)));
+    router.push(destinationFor(readNext(), role === "admin"));
   }
 
   return (
@@ -37,6 +41,33 @@ export default function LoginPage() {
       title="Login"
       description="Welcome back! Login and continue your journey."
     >
+      {/* Role selector */}
+      <div className="w-full">
+        <p className="mb-2 text-xs font-semibold text-text-secondary">Sign in as</p>
+        <div
+          role="radiogroup"
+          aria-label="Sign in as"
+          className="grid grid-cols-2 gap-2 rounded-lg bg-grey-500/8 p-1"
+        >
+          {ROLES.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={role === id}
+              onClick={() => setRole(id)}
+              className={`rounded-md py-2 text-sm font-semibold transition-colors ${
+                role === id
+                  ? "bg-white text-primary shadow-[var(--shadow-card)]"
+                  : "text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Fields */}
       <div className="flex w-full flex-col gap-4">
         <FilledInput
