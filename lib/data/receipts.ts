@@ -48,12 +48,16 @@ export function buildReceipt(
   d: ScheduledDelivery,
   status: ReceiptStatus,
   billToName?: string,
+  /* Orders priced on the posted per-gallon rate carry Florida *sales* tax, not
+     the per-gallon excise assumed below. Those callers (admin Finance) pass
+     their own tax line so the breakdown still reconciles to the total. */
+  taxLine?: { label: string; amount: number; note: string },
 ): Receipt {
   const total = parsePrice(d.price ?? "$0");
   const gallons = d.gallonsDelivered ?? d.gallonsScheduled;
   const urgency = URGENCY_OPTIONS[d.urgency];
   const deliveryFee = urgency.fee;
-  const taxes = round2(gallons * FL_FUEL_TAX_PER_GAL);
+  const taxes = taxLine ? taxLine.amount : round2(gallons * FL_FUEL_TAX_PER_GAL);
   const fuelCost = round2(total - deliveryFee - taxes);
   const rawPerGallon = gallons ? round2(fuelCost / gallons) : 0;
   const costPerGallon = gallons ? round2(total / gallons) : 0;
@@ -81,7 +85,7 @@ export function buildReceipt(
         free: deliveryFee === 0,
         note: `${urgency.title} scheduled delivery`,
       },
-      {
+      taxLine ?? {
         label: "Florida fuel tax (on-road)",
         amount: taxes,
         note: `$${FL_FUEL_TAX_PER_GAL.toFixed(3)}/gal • pass-through to FL DOR`,

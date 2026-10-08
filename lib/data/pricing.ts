@@ -10,6 +10,8 @@
     splits into the 6% state rate and Palm Beach County's 0.5% surtax.
 */
 
+import type { County } from "./customers";
+
 export type FuelTypeId = "off_road" | "on_road";
 
 /** Posted per-gallon rate for off-road dyed diesel (USD). */
@@ -29,8 +31,41 @@ export const DEF_MAX = 25;
 export const FL_STATE_TAX_RATE = 0.06;
 /** Palm Beach County discretionary surtax. */
 export const COUNTY_SURTAX_RATE = 0.005;
-/** Combined rate charged on taxable fuel and fees (6.5%). */
+/** Combined rate charged on taxable fuel and fees in Palm Beach (6.5%). */
 export const FL_TAX_RATE = FL_STATE_TAX_RATE + COUNTY_SURTAX_RATE;
+
+/* The discretionary surtax is set per county on top of the 6% state rate. Of the
+   counties we reach, only Palm Beach levies one today — the others bill at the
+   state rate. Add a county here when that changes. */
+export const COUNTY_SURTAX: Record<County, number> = {
+  "Palm Beach": COUNTY_SURTAX_RATE,
+  Broward: 0,
+  Collier: 0,
+};
+
+/* Card-processing fee. The processor takes its cut of the whole amount that
+   runs through the card, so the rate applies to the tax-inclusive subtotal —
+   fuel, fees and sales tax — and the flat charge is added on top. The fee
+   itself is not taxed. */
+export const CONVENIENCE_FEE_RATE = 0.03;
+export const CONVENIENCE_FEE_FLAT = 30;
+
+/** 3% of the tax-inclusive subtotal, plus $30. */
+export function convenienceFeeOn(subtotalWithTax: number): number {
+  return (
+    Math.round((subtotalWithTax * CONVENIENCE_FEE_RATE + CONVENIENCE_FEE_FLAT) * 100 + 1e-6) / 100
+  );
+}
+
+/** Sales-tax rate for a delivery address, e.g. 0.065 in Palm Beach, 0.06 elsewhere. */
+export function taxRateForCounty(county: County): number {
+  return FL_STATE_TAX_RATE + (COUNTY_SURTAX[county] ?? 0);
+}
+
+/** 0.065 -> "6.5%", 0.06 -> "6%". */
+export function formatTaxRate(rate: number): string {
+  return `${Number((rate * 100).toFixed(2))}%`;
+}
 
 export type FuelTypeDef = {
   id: FuelTypeId;
