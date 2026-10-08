@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Modal } from "@/components/ui/Modal";
 import {
   DropletIcon,
   EyeIcon,
@@ -28,6 +29,9 @@ import {
 } from "@/lib/data/adminDeliveries";
 import type { RescheduleInput } from "@/lib/store";
 import { useFueledAddresses } from "@/lib/store";
+
+type TabKey = "All" | AdminPeriod;
+const TABS: TabKey[] = ["All", ...ADMIN_PERIODS];
 
 function shiftISO(iso: string, days: number): string {
   const { y, m, d } = parseISO(iso);
@@ -85,7 +89,7 @@ function TimelineItem({
             <>
               <Button variant="soft" size="sm" onClick={() => onReschedule(d)}>
                 <CalendarIcon size={18} />
-                Reschedule Service
+                Edit Service
               </Button>
               <Button variant="errorSoft" size="sm" onClick={() => onCancel(d)}>
                 <TrashIcon size={18} />
@@ -101,7 +105,9 @@ function TimelineItem({
 
 export default function AdminDeliveriesPage() {
   const [selectedISO, setSelectedISO] = useState(ADMIN_INITIAL_DAY);
-  const [tab, setTab] = useState<AdminPeriod>("Morning");
+  // "All" is the design's default tab; the three periods narrow the list.
+  const [tab, setTab] = useState<TabKey>("All");
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [removed, setRemoved] = useState<Set<string>>(new Set());
 
   const [detail, setDetail] = useState<AdminScheduledDelivery | null>(null);
@@ -116,7 +122,7 @@ export default function AdminDeliveriesPage() {
   );
 
   const visible = all.filter((d) => !removed.has(d.id));
-  const rows = visible.filter((d) => d.period === tab);
+  const rows = tab === "All" ? visible : visible.filter((d) => d.period === tab);
 
   function drop(id: string) {
     setRemoved((s) => new Set(s).add(id));
@@ -142,22 +148,21 @@ export default function AdminDeliveriesPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_320px] md:gap-8 lg:grid-cols-[1fr_400px]">
-        {/* Calendar */}
-        <AdminDeliveryCalendar
-          selectedISO={selectedISO}
-          onSelectDay={(iso) => {
-            setSelectedISO(iso);
-            setTab("Morning");
-          }}
-        />
-
-        {/* Day panel */}
-        <div className="flex flex-col gap-4">
+      {/* The schedule is a single 600px column, centred in the content area. */}
+      <div className="mx-auto flex w-full max-w-[600px] flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold text-text-primary">
-              {formatLongDate(selectedISO)}
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-semibold text-text-primary">
+                {formatLongDate(selectedISO)}
+              </h2>
+              <button
+                aria-label="Pick a day"
+                onClick={() => setCalendarOpen(true)}
+                className="grid h-9 w-9 place-items-center rounded-lg bg-grey-500/8 text-grey-700 transition-colors hover:bg-grey-500/16"
+              >
+                <CalendarIcon size={20} />
+              </button>
+            </div>
             <div className="flex items-center gap-1">
               <button
                 aria-label="Previous day"
@@ -178,7 +183,7 @@ export default function AdminDeliveriesPage() {
 
           {/* Period tabs */}
           <div className="flex gap-6 border-b border-divider">
-            {ADMIN_PERIODS.map((p) => (
+            {TABS.map((p) => (
               <button
                 key={p}
                 onClick={() => setTab(p)}
@@ -218,8 +223,25 @@ export default function AdminDeliveriesPage() {
               ))
             )}
           </div>
-        </div>
       </div>
+
+      {/* Day picker */}
+      <Modal
+        open={calendarOpen}
+        onClose={() => setCalendarOpen(false)}
+        title="Pick a day"
+        bodyClassName="px-4 pb-4"
+        width={400}
+      >
+        <AdminDeliveryCalendar
+          selectedISO={selectedISO}
+          onSelectDay={(iso) => {
+            setSelectedISO(iso);
+            setTab("All");
+            setCalendarOpen(false);
+          }}
+        />
+      </Modal>
 
       {/* Modals (reused from the customer app) */}
       <ScheduleDetailModal
