@@ -45,6 +45,10 @@ export type FuelingUnit = {
   done?: boolean;
   /** Operator could not reach or fill this unit — it is left out of the total. */
   skipped?: boolean;
+  /** Why, from CANT_FUEL_REASONS. */
+  skipReason?: string;
+  /** The operator's own description of the problem. */
+  skipNote?: string;
   note?: string;
   equipmentPhoto?: string;
   odometerPhoto?: string;
@@ -84,6 +88,9 @@ export const FUEL_OVERRIDE_DEFAULT = 1.3;
 export const FUEL_OVERRIDE_CHANGED_ON = "05/23/26";
 /** Flat DEF top-off charge, matching the posted rate in ./pricing. */
 export const DEF_TOP_OFF_PRICE = 95;
+
+/** Reasons the operator can give for leaving a unit unfuelled. */
+export const CANT_FUEL_REASONS = ["Unit not found", "Blocked unit", "Other"] as const;
 export const FUEL_CAPACITY = 150;
 
 const genUnit = (prefix: string, i: number) => `${prefix}${100000 + i * 1111}`;

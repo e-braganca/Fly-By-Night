@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Modal } from "@/components/ui/Modal";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Avatar } from "@/components/ui/Avatar";
 import {
@@ -15,6 +16,7 @@ import {
   DropletIcon,
   InvoiceIcon,
   XCircleIcon,
+  ChevronDownIcon,
 } from "@/components/ui/Icon";
 import { money } from "@/lib/data/receipts";
 import { SELLER, BILL_TO } from "@/lib/data/receipts";
@@ -27,6 +29,7 @@ import {
   FUEL_OVERRIDE_CHANGED_ON,
   DEF_TOP_OFF_PRICE,
   FUELING_SEED,
+  CANT_FUEL_REASONS,
   type FuelingEquipment,
 } from "@/lib/data/admin";
 
@@ -177,6 +180,184 @@ function StatusPill({ done, skipped }: { done: boolean; skipped?: boolean }) {
   );
 }
 
+/** Dark circular mark used in the fueling dialogs' headers. */
+function DialogMark({ children }: { children: ReactNode }) {
+  return (
+    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-grey-900 text-white">
+      {children}
+    </span>
+  );
+}
+
+/*
+  The before-photo gate. Starting a unit without a photo of the equipment opens
+  this instead of starting the pump — the photo is the record that the unit was
+  found as described.
+*/
+function BeforePhotoModal({
+  open,
+  equipment,
+  value,
+  onChange,
+  onAccept,
+  onClose,
+}: {
+  open: boolean;
+  equipment: FuelingEquipment | null;
+  value?: string;
+  onChange: (v: string | undefined) => void;
+  onAccept: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      width={480}
+      leading={
+        <DialogMark>
+          <CameraIcon size={16} />
+        </DialogMark>
+      }
+      title="Please take a photo of the equipment before proceeding!"
+      bodyClassName="px-6 py-4"
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button size="lg" variant="dark" disabled={!value} onClick={onAccept}>
+            Accept
+          </Button>
+          <Button size="lg" variant="soft" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      }
+    >
+      <div className="mb-4 flex items-center gap-3">
+        <Avatar
+          size={64}
+          src={equipment?.image}
+          fallback={<TractorIcon size={26} className="text-grey-500" />}
+        />
+        <p className="text-lg font-bold text-text-primary">{equipment?.name}</p>
+      </div>
+      <PhotoTile label="" value={value} onChange={onChange} />
+    </Modal>
+  );
+}
+
+/* Why a unit is being left unfuelled, and whether the rest of the equipment's
+   units are in the same state. */
+function CantFuelModal({
+  open,
+  onClose,
+  onAccept,
+  unitCount,
+  reason,
+  setReason,
+  note,
+  setNote,
+  applyToAll,
+  setApplyToAll,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onAccept: (v: { reason: string; note: string; applyToAll: boolean }) => void;
+  unitCount: number;
+  /* The form is controlled from the flow, which blanks it when opening the
+     dialog — clearing it from an effect here would just re-render twice. */
+  reason: string;
+  setReason: (v: string) => void;
+  note: string;
+  setNote: (v: string) => void;
+  applyToAll: boolean;
+  setApplyToAll: (v: boolean) => void;
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      width={480}
+      leading={
+        <DialogMark>
+          <XCircleIcon size={18} />
+        </DialogMark>
+      }
+      title="What prevents you from fueling this equipment unit?"
+      bodyClassName="px-6 py-4"
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button
+            size="lg"
+            variant="dark"
+            disabled={!reason}
+            onClick={() => onAccept({ reason, note: note.trim(), applyToAll })}
+          >
+            Accept
+          </Button>
+          <Button size="lg" variant="soft" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <span className="relative block">
+          <select
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            aria-label="Reason"
+            className="h-12 w-full appearance-none rounded-lg bg-grey-500/8 px-4 pr-10 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary/24"
+          >
+            <option value="">Select an option</option>
+            {CANT_FUEL_REASONS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+          <ChevronDownIcon
+            size={18}
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-grey-600"
+          />
+        </span>
+
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Explain"
+          rows={4}
+          className="w-full resize-none rounded-lg bg-grey-500/8 px-4 py-3 text-sm text-text-primary outline-none placeholder:text-text-disabled focus:ring-2 focus:ring-primary/24"
+        />
+
+        {unitCount > 1 && (
+          <fieldset>
+            <legend className="mb-2 text-sm text-text-primary">
+              Should this be reflected to all other units under this equipment?
+            </legend>
+            <div className="flex items-center gap-6">
+              {[
+                { label: "Yes", value: true },
+                { label: "No", value: false },
+              ].map((o) => (
+                <label key={o.label} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="apply-to-all"
+                    checked={applyToAll === o.value}
+                    onChange={() => setApplyToAll(o.value)}
+                    className="h-4 w-4 accent-primary"
+                  />
+                  {o.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 /* --------------------------------- flow --------------------------------- */
 
 export function FuelingFlow({
@@ -202,6 +383,19 @@ export function FuelingFlow({
   /** The current unit's pump is running — switches the unit screen to phase two. */
   const [running, setRunning] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [photoGate, setPhotoGate] = useState(false);
+  const [cantFuel, setCantFuel] = useState(false);
+  const [skipReason, setSkipReason] = useState("");
+  const [skipNote, setSkipNote] = useState("");
+  const [skipAll, setSkipAll] = useState(false);
+
+  /** Open the can't-fuel dialog on a blank form. */
+  function openCantFuel() {
+    setSkipReason("");
+    setSkipNote("");
+    setSkipAll(false);
+    setCantFuel(true);
+  }
   const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -242,6 +436,33 @@ export function FuelingFlow({
           : e,
       ),
     );
+  }
+
+  /** Record a unit (or the whole equipment) as impossible to fuel. */
+  function skipUnit({ reason, note, applyToAll }: { reason: string; note: string; applyToAll: boolean }) {
+    setEquips((list) =>
+      list.map((e) =>
+        e.id !== activeId
+          ? e
+          : {
+              ...e,
+              units: e.units.map((u, i) =>
+                applyToAll || i === sel
+                  ? { ...u, skipped: true, done: false, gallons: 0, skipReason: reason, skipNote: note }
+                  : u,
+              ),
+            },
+      ),
+    );
+    setCantFuel(false);
+    if (applyToAll) {
+      settleEquipment();
+      setActiveId(null);
+      setSel(0);
+      setStep("list");
+    } else {
+      advanceUnit();
+    }
   }
 
   function advanceUnit() {
@@ -356,7 +577,34 @@ export function FuelingFlow({
 
     return (
       <Shell
-        dialog={cancelDialog}
+        dialog={
+          <>
+            {cancelDialog}
+            <BeforePhotoModal
+              open={photoGate}
+              equipment={active}
+              value={unit.equipmentPhoto}
+              onChange={(v) => patchUnit({ equipmentPhoto: v })}
+              onAccept={() => {
+                setPhotoGate(false);
+                setRunning(true);
+              }}
+              onClose={() => setPhotoGate(false)}
+            />
+            <CantFuelModal
+              open={cantFuel}
+              unitCount={active.units.length}
+              onClose={() => setCantFuel(false)}
+              onAccept={skipUnit}
+              reason={skipReason}
+              setReason={setSkipReason}
+              note={skipNote}
+              setNote={setSkipNote}
+              applyToAll={skipAll}
+              setApplyToAll={setSkipAll}
+            />
+          </>
+        }
         title="Start fueling"
         subtitle="Go over each requested equipment to be filled, and add the information."
         footer={
@@ -365,11 +613,13 @@ export function FuelingFlow({
               variant="soft"
               size="lg"
               onClick={() => {
+                // "Start over" only resets the pump; "Back" leaves the equipment.
+                // Units are moved between with the serial rail, so Back returns
+                // to the list rather than stepping back one unit.
                 if (running) return setRunning(false);
-                if (sel === 0) {
-                  setActiveId(null);
-                  setStep("list");
-                } else setSel((s) => s - 1);
+                setActiveId(null);
+                setSel(0);
+                setStep("list");
               }}
             >
               {running ? "Start over" : "Back"}
@@ -388,17 +638,14 @@ export function FuelingFlow({
               </Button>
             ) : (
               <>
-                <Button
-                  variant="errorSoft"
-                  size="lg"
-                  onClick={() => {
-                    patchUnit({ skipped: true, done: false, gallons: 0 });
-                    advanceUnit();
-                  }}
-                >
+                <Button variant="errorSoft" size="lg" onClick={openCantFuel}>
                   Can&apos;t Fuel
                 </Button>
-                <Button size="lg" className="flex-1" onClick={() => setRunning(true)}>
+                <Button
+                  size="lg"
+                  className="flex-1"
+                  onClick={() => (unit.equipmentPhoto ? setRunning(true) : setPhotoGate(true))}
+                >
                   Start Fueling Unit
                   <DropletIcon size={20} />
                 </Button>

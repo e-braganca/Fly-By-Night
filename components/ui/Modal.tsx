@@ -10,6 +10,8 @@ export function Modal({
   open,
   onClose,
   title,
+  /** Small mark shown before the title, as the fueling dialogs do. */
+  leading,
   children,
   footer,
   headerActions,
@@ -19,6 +21,7 @@ export function Modal({
   open: boolean;
   onClose: () => void;
   title: string;
+  leading?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
   headerActions?: ReactNode;
@@ -71,8 +74,9 @@ export function Modal({
         style={{ maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 px-6 pb-2 pt-6">
-          <h2 className="flex-1 text-lg font-semibold text-text-primary">{title}</h2>
+        <div className="flex items-start gap-3 px-6 pb-2 pt-6">
+          {leading}
+          <h2 className="flex-1 text-base font-bold leading-snug text-text-primary">{title}</h2>
           {headerActions}
           <button
             onClick={onClose}
