@@ -1,111 +1,194 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
-import { StatCard } from "@/components/ui/StatCard";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DateField } from "@/components/ui/FilterField";
 import {
-  DropletIcon,
-  PencilIcon,
+  FilterIcon,
+  PlusIcon,
   TrashIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronDownIcon,
 } from "@/components/ui/Icon";
-import { FillTankModal } from "@/components/admin/FillTankModal";
-import { PAGE_X, PAGE_Y, STICKY_HEADER } from "@/components/ui/layout";
+import { PAGE_X, PAGE_Y, STICKY_HEADER, PAGE_MAX_WIDE, PAGE_FILL, PAGE_FILL_BODY } from "@/components/ui/layout";
 import { money } from "@/lib/data/receipts";
-import { seedRefuelings, fillTankKpis, type TankRefueling } from "@/lib/data/fillTank";
+import {
+  seedRefuelings,
+  computePurchase,
+  newPurchaseTimestamp,
+  PURCHASE_RANGE,
+  type TankRefueling,
+} from "@/lib/data/fillTank";
 
-const COLS = "1.2fr 1fr 1fr 1.1fr 1.2fr 84px";
+const COLS = "1.2fr 1.2fr 1fr 1fr 1.4fr 64px";
 
-function KpiValue({ value, unit }: { value: string; unit?: string }) {
+/** Filled input with a unit pinned to its right edge, as in the Figma composer. */
+function UnitInput({
+  placeholder,
+  unit,
+  value,
+  onChange,
+  grow = "flex-1",
+}: {
+  placeholder: string;
+  unit: ReactNode;
+  value: string;
+  onChange: (v: string) => void;
+  /** Share of the row this field takes — the longest placeholder needs more. */
+  grow?: string;
+}) {
   return (
-    <span>
-      <span className="text-xl font-semibold text-primary">{value}</span>
-      {unit && <span className="text-sm text-text-primary"> {unit}</span>}
-    </span>
+    <div className={`relative min-w-0 ${grow}`}>
+      <input
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/[^\d.]/g, ""))}
+        placeholder={placeholder}
+        className="h-12 w-full rounded-lg bg-grey-500/8 pl-4 pr-14 text-sm text-text-primary outline-none placeholder:text-text-disabled focus:ring-2 focus:ring-primary/24"
+      />
+      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-text-primary">
+        {unit}
+      </span>
+    </div>
+  );
+}
+
+/** A derived figure in the composer: small grey caption over a bold value. */
+function Derived({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-[96px]">
+      <p className="text-xs text-text-secondary">{label}</p>
+      <p className="text-lg font-bold text-text-primary">
+        {value}
+        <span className="text-sm font-normal text-text-secondary">/gal</span>
+      </p>
+    </div>
   );
 }
 
 export default function FillMyTankPage() {
   const [rows, setRows] = useState<TankRefueling[]>(seedRefuelings);
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<TankRefueling | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TankRefueling | null>(null);
   const [pageSize, setPageSize] = useState(5);
   const [page, setPage] = useState(0);
 
-  function openCreate() {
-    setEditing(null);
-    setOpen(true);
+  // Composer
+  const [gallons, setGallons] = useState("");
+  const [cost, setCost] = useState("");
+  const [markup, setMarkup] = useState("");
+
+  // Filters (revealed by the header button)
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [fromISO, setFromISO] = useState(PURCHASE_RANGE.from);
+  const [toISO, setToISO] = useState(PURCHASE_RANGE.to);
+
+  const g = Number(gallons) || 0;
+  const c = Number(cost) || 0;
+  const m = Number(markup) || 0;
+  const { costPerGallon, sellPrice } = computePurchase(g, c, m);
+  const canAdd = g > 0 && c > 0;
+
+  function addPurchase() {
+    if (!canAdd) return;
+    const stamp = newPurchaseTimestamp();
+    setRows((rs) => [
+      { id: `r${Date.now()}`, gallons: g, total: c, markup: m, costPerGallon, ...stamp },
+      ...rs,
+    ]);
+    setGallons("");
+    setCost("");
+    setMarkup("");
+    setPage(0);
   }
 
-  function openEdit(row: TankRefueling) {
-    setEditing(row);
-    setOpen(true);
-  }
+  const filtered = useMemo(
+    () => rows.filter((r) => r.dateISO >= fromISO && r.dateISO <= toISO),
+    [rows, fromISO, toISO],
+  );
 
-  function saveRow(r: TankRefueling) {
-    setRows((rs) =>
-      rs.some((x) => x.id === r.id)
-        ? rs.map((x) => (x.id === r.id ? r : x)) // update
-        : [r, ...rs], // create
-    );
-    if (!editing) setPage(0);
-  }
-
-  function deleteRow(id: string) {
-    setRows((rs) => rs.filter((x) => x.id !== id));
-  }
-
-  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const clamped = Math.min(page, pageCount - 1);
   const start = clamped * pageSize;
-  const view = rows.slice(start, start + pageSize);
-  const rangeEnd = Math.min(start + pageSize, rows.length);
+  const view = filtered.slice(start, start + pageSize);
+  const rangeEnd = Math.min(start + pageSize, filtered.length);
 
   return (
-    <div className={`mx-auto flex w-full max-w-[1200px] flex-col gap-6 ${PAGE_X} ${PAGE_Y}`}>
-      {/* Header (sticky) */}
+    <div className={`mx-auto flex w-full ${PAGE_MAX_WIDE} ${PAGE_FILL} flex-col gap-6 ${PAGE_X} ${PAGE_Y}`}>
+      {/* Header */}
       <div className={`flex flex-wrap items-center gap-3 sm:gap-4 ${STICKY_HEADER}`}>
         <h1 className="flex-1 text-2xl font-bold text-text-primary sm:text-3xl">Fill My Tank</h1>
-        <Button size="md" onClick={openCreate}>
-          <DropletIcon size={20} />
-          Fill Tank Now
+        <Button
+          variant="dark"
+          size="lg"
+          onClick={() => setFiltersOpen((f) => !f)}
+          aria-expanded={filtersOpen}
+        >
+          <FilterIcon size={18} />
+          Filters
         </Button>
       </div>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard label="Last week price avg.">
-          <KpiValue value={money(fillTankKpis.priceAvgPerGal)} unit="/gal" />
-        </StatCard>
-        <StatCard label="Last week total fuel cost">
-          <KpiValue value={money(fillTankKpis.totalFuelCost)} />
-        </StatCard>
-        <StatCard label="Last week fuel avg.">
-          <KpiValue value={String(fillTankKpis.fuelAvgGallons)} unit="gallons" />
-        </StatCard>
-        <StatCard label="Last week total fuel">
-          <KpiValue value={fillTankKpis.totalFuelGallons.toLocaleString("en-US")} unit="gallons" />
-        </StatCard>
+      {filtersOpen && (
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-[calc(50%-6px)] sm:w-[170px]">
+            <DateField label="From" value={fromISO} max={toISO} onChange={setFromISO} />
+          </div>
+          <div className="w-[calc(50%-6px)] sm:w-[170px]">
+            <DateField label="To" value={toISO} min={fromISO} onChange={setToISO} />
+          </div>
+        </div>
+      )}
+
+      {/* Composer */}
+      <div className="rounded-[var(--radius-card)] bg-white p-5">
+        <h2 className="mb-4 text-base font-bold text-text-primary">Fill your tank now</h2>
+
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+          <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row">
+            <UnitInput
+              placeholder="Total fuel dispensed"
+              unit="gal"
+              value={gallons}
+              onChange={setGallons}
+              grow="flex-[1.5]"
+            />
+            <UnitInput placeholder="Total Cost" unit="$" value={cost} onChange={setCost} />
+            <UnitInput
+              placeholder="Markup Price"
+              unit="$/gal"
+              value={markup}
+              onChange={setMarkup}
+              grow="flex-[1.2]"
+            />
+          </div>
+
+          <div className="flex items-center gap-6">
+            <Derived label="Cost" value={money(costPerGallon)} />
+            <Derived label="Sell price" value={money(sellPrice)} />
+          </div>
+
+          <Button size="lg" disabled={!canAdd} onClick={addPurchase} className="xl:w-[220px]">
+            Add fuel purchase
+            <PlusIcon size={18} />
+          </Button>
+        </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
-        <div className="min-w-[820px]">
+      <div className={`overflow-x-auto ${PAGE_FILL_BODY}`}>
+        <div className="min-w-[860px]">
           <div
             className="grid items-center gap-4 px-4 py-3 text-sm font-semibold text-text-secondary"
             style={{ gridTemplateColumns: COLS }}
           >
             <span>Total Gallons Dispensed</span>
-            <span>Cost Per Gallon</span>
-            <span>Fuel Type</span>
             <span>Total Amount Charged</span>
+            <span>Cost Per Gallon</span>
+            <span>Markup Price</span>
             <span>Transaction Date</span>
-            <span className="text-right">Actions</span>
+            <span />
           </div>
 
           {view.map((r, i) => (
@@ -117,26 +200,15 @@ export default function FillMyTankPage() {
               style={{ gridTemplateColumns: COLS }}
             >
               <span>{r.gallons} Gallons</span>
-              <span>{money(r.costPerGallon)}</span>
-              <span>
-                <Badge tone={r.fuelType === "On-road" ? "info" : "neutral"}>
-                  {r.fuelType}
-                </Badge>
-              </span>
               <span>{money(r.total)}</span>
+              <span>{money(r.costPerGallon)}</span>
+              <span>{money(r.markup)}</span>
               <span>{r.date}</span>
-              <span className="flex items-center justify-end gap-1">
+              <span className="flex justify-end">
                 <button
-                  aria-label="Edit refueling"
-                  onClick={() => openEdit(r)}
-                  className="grid h-8 w-8 place-items-center rounded-full text-grey-700 transition-colors hover:bg-grey-500/8"
-                >
-                  <PencilIcon size={18} />
-                </button>
-                <button
-                  aria-label="Delete refueling"
+                  aria-label={`Delete the ${r.gallons}-gallon purchase from ${r.date}`}
                   onClick={() => setDeleteTarget(r)}
-                  className="grid h-8 w-8 place-items-center rounded-full text-error transition-colors hover:bg-error/8"
+                  className="grid h-9 w-9 place-items-center rounded-lg bg-grey-500/8 text-grey-700 transition-colors hover:bg-error/8 hover:text-error"
                 >
                   <TrashIcon size={18} />
                 </button>
@@ -146,7 +218,7 @@ export default function FillMyTankPage() {
 
           {view.length === 0 && (
             <p className="px-4 py-12 text-center text-sm text-grey-500">
-              No refuelings logged yet.
+              No fuel purchases in this range.
             </p>
           )}
         </div>
@@ -175,7 +247,7 @@ export default function FillMyTankPage() {
           </div>
         </div>
         <span>
-          {rows.length === 0 ? 0 : start + 1}-{rangeEnd} of {rows.length}
+          {filtered.length === 0 ? 0 : start + 1}-{rangeEnd} of {filtered.length}
         </span>
         <div className="flex items-center gap-1">
           <button
@@ -197,21 +269,16 @@ export default function FillMyTankPage() {
         </div>
       </div>
 
-      <FillTankModal
-        open={open}
-        editing={editing}
-        onClose={() => setOpen(false)}
-        onSave={saveRow}
-      />
-
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && deleteRow(deleteTarget.id)}
-        title="Delete this refueling?"
+        onConfirm={() => {
+          if (deleteTarget) setRows((rs) => rs.filter((x) => x.id !== deleteTarget.id));
+        }}
+        title="Delete this fuel purchase?"
         description={
           deleteTarget
-            ? `The ${deleteTarget.gallons}-gallon entry from ${deleteTarget.date} will be removed. This can't be undone.`
+            ? `The ${deleteTarget.gallons}-gallon load from ${deleteTarget.date} will be removed. This can't be undone.`
             : undefined
         }
         confirmLabel="Delete"

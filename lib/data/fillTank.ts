@@ -1,47 +1,84 @@
-/* Fill My Tank (admin) — the operator's own fuel-purchase log + last-week KPIs. */
+/* Fill My Tank (admin) — the operator's own fuel-purchase log.
 
-import type { EquipmentClass } from "./types";
+   One row is one load bought from the supplier: how many gallons went in, what
+   the supplier charged, and the markup we add when reselling it. Cost per gallon
+   is derived (total / gallons) rather than typed, so a row can never disagree
+   with itself, and the sell price is cost + markup. */
 
-export type TankRefueling = {
-  id: string;
-  gallons: number;
-  costPerGallon: number;
-  taxPct: number;
-  taxAmount: number;
-  total: number;
-  /** On-road vs Off-road diesel. */
-  fuelType: EquipmentClass;
-  /** display string, e.g. "8:17 am - May 18, 2026". */
-  date: string;
-};
-
-export const fillTankKpis = {
-  priceAvgPerGal: 2.28,
-  totalFuelCost: 12532.5,
-  fuelAvgGallons: 450,
-  totalFuelGallons: 2700,
-};
-
-export const seedRefuelings: TankRefueling[] = [
-  { id: "r1", gallons: 300, costPerGallon: 4.0, taxPct: 10, taxAmount: 250, total: 1200, fuelType: "Off-road", date: "8:17 am - Jul 20, 2026" },
-  { id: "r2", gallons: 150, costPerGallon: 3.5, taxPct: 5, taxAmount: 125, total: 525, fuelType: "On-road", date: "8:31 am - Jul 18, 2026" },
-  { id: "r3", gallons: 400, costPerGallon: 4.25, taxPct: 12, taxAmount: 300, total: 1700, fuelType: "Off-road", date: "1:42 pm - Jul 17, 2026" },
-  { id: "r4", gallons: 350, costPerGallon: 3.9, taxPct: 7, taxAmount: 175, total: 682.5, fuelType: "Off-road", date: "8:03 am - Jul 17, 2026" },
-  { id: "r5", gallons: 500, costPerGallon: 4.5, taxPct: 15, taxAmount: 375, total: 2250, fuelType: "On-road", date: "8:11 am - Jul 16, 2026" },
-  { id: "r6", gallons: 600, costPerGallon: 4.75, taxPct: 20, taxAmount: 500, total: 3000, fuelType: "Off-road", date: "8:33 am - Jul 15, 2026" },
-  { id: "r7", gallons: 700, costPerGallon: 5.0, taxPct: 25, taxAmount: 625, total: 4375, fuelType: "On-road", date: "8:21 am - Jul 14, 2026" },
-  { id: "r8", gallons: 800, costPerGallon: 5.25, taxPct: 30, taxAmount: 750, total: 5250, fuelType: "Off-road", date: "8:18 am - Jul 11, 2026" },
-  { id: "r9", gallons: 700, costPerGallon: 5.0, taxPct: 25, taxAmount: 625, total: 4375, fuelType: "On-road", date: "8:26 am - Jul 10, 2026" },
-];
+import { REFERENCE_TODAY } from "./schedule";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Compute the derived amounts for a refueling from raw inputs. */
-export function computeRefueling(gallons: number, costPerGallon: number, taxPct: number) {
-  const fuelCost = round2(gallons * costPerGallon);
-  const taxAmount = round2((fuelCost * taxPct) / 100);
-  const total = round2(fuelCost + taxAmount);
-  return { fuelCost, taxAmount, total };
+export type TankRefueling = {
+  id: string;
+  /** Gallons taken on. */
+  gallons: number;
+  /** What the supplier charged for the load. */
+  total: number;
+  /** total / gallons. */
+  costPerGallon: number;
+  /** Margin added per gallon when this fuel is resold. */
+  markup: number;
+  /** Display string, e.g. "8:17 am - July 20, 2026". */
+  date: string;
+  /** Same moment as `date`, sortable and filterable. */
+  dateISO: string;
+};
+
+/** Derive a row's per-gallon cost and resale price from the raw inputs. */
+export function computePurchase(gallons: number, total: number, markup: number) {
+  const costPerGallon = gallons > 0 ? round2(total / gallons) : 0;
+  return { costPerGallon, sellPrice: round2(costPerGallon + markup) };
+}
+
+/* Rack prices for off-road dyed diesel, which is what the truck is loaded with.
+   A dollar of markup puts the resale price next to the posted rate in
+   ./pricing — buying above that would mean selling at a loss. */
+const seed: [string, number, number, number, string, string][] = [
+  ["r1", 300, 726.0, 1.0, "8:17 am - July 20, 2026", "2026-07-20"],
+  ["r2", 150, 357.0, 1.0, "8:31 am - July 18, 2026", "2026-07-18"],
+  ["r3", 400, 980.0, 1.0, "1:42 pm - July 17, 2026", "2026-07-17"],
+  ["r4", 350, 840.0, 1.0, "8:03 am - July 17, 2026", "2026-07-17"],
+  ["r5", 500, 1255.0, 1.0, "8:11 am - July 16, 2026", "2026-07-16"],
+  ["r6", 600, 1482.0, 1.0, "8:33 am - July 15, 2026", "2026-07-15"],
+  ["r7", 700, 1673.0, 1.0, "8:21 am - July 14, 2026", "2026-07-14"],
+  ["r8", 800, 2040.0, 1.0, "8:18 am - July 11, 2026", "2026-07-11"],
+  ["r9", 700, 1708.0, 1.0, "8:26 am - July 10, 2026", "2026-07-10"],
+];
+
+export const seedRefuelings: TankRefueling[] = seed.map(
+  ([id, gallons, total, markup, date, dateISO]) => ({
+    id,
+    gallons,
+    total,
+    markup,
+    costPerGallon: computePurchase(gallons, total, markup).costPerGallon,
+    date,
+    dateISO,
+  }),
+);
+
+/* The range the filter opens on. It runs to the app's reference "today" rather
+   than to the newest seeded row, so a purchase added now lands inside the range
+   instead of being filtered straight back out. */
+export const PURCHASE_RANGE = {
+  from: seed[seed.length - 1][5],
+  to: REFERENCE_TODAY,
+};
+
+/**
+ * Timestamp for a purchase logged right now. The date comes from the app's
+ * reference day so new rows sit on the same timeline as the seeded ones; the
+ * time of day comes from the clock. Client-side only (post-hydration).
+ */
+export function newPurchaseTimestamp(now = new Date()) {
+  const { y, m, d } = {
+    y: Number(REFERENCE_TODAY.slice(0, 4)),
+    m: Number(REFERENCE_TODAY.slice(5, 7)),
+    d: Number(REFERENCE_TODAY.slice(8, 10)),
+  };
+  const stamped = new Date(y, m - 1, d, now.getHours(), now.getMinutes());
+  return { date: formatTransactionDate(stamped), dateISO: REFERENCE_TODAY };
 }
 
 const MONTHS = [
