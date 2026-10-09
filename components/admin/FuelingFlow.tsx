@@ -17,6 +17,7 @@ import {
   InvoiceIcon,
   XCircleIcon,
   ChevronDownIcon,
+  ArrowRightIcon,
 } from "@/components/ui/Icon";
 import { money } from "@/lib/data/receipts";
 import { SELLER, BILL_TO } from "@/lib/data/receipts";
@@ -451,6 +452,14 @@ export function FuelingFlow({
     if (then === "complete") completeUnit();
   }
 
+  /** Leave the equipment and go back to the list of all equipment. */
+  function backToList() {
+    setRunning(false);
+    setActiveId(null);
+    setSel(0);
+    setStep("list");
+  }
+
   /** Mark the unit fuelled and move on. */
   function completeUnit() {
     patchUnit({ done: true, skipped: false });
@@ -680,32 +689,33 @@ export function FuelingFlow({
         subtitle="Go over each requested equipment to be filled, and add the information."
         footer={
           <>
-            <Button
-              variant="soft"
-              size="lg"
-              onClick={() => {
-                // "Start over" only resets the pump; "Back" leaves the equipment.
-                // Units are moved between with the serial rail, so Back returns
-                // to the list rather than stepping back one unit.
-                if (running) return setRunning(false);
-                setActiveId(null);
-                setSel(0);
-                setStep("list");
-              }}
-            >
-              {running ? "Start over" : "Back"}
+            {/* Back always leaves the equipment — units are moved between with the
+                serial rail beside them, so there is nothing to step back to. */}
+            <Button variant="soft" size="lg" onClick={backToList}>
+              <ArrowRightIcon size={18} className="rotate-180" />
+              Back
             </Button>
             {running ? (
-              <Button
-                size="lg"
-                className="flex-1"
-                onClick={() =>
-                  unit.odometerPhoto ? completeUnit() : openPhoto("after", "complete")
-                }
-              >
-                Complete Unit Fueling
-                <CheckIcon size={20} />
-              </Button>
+              <>
+                <Button
+                  variant="soft"
+                  size="lg"
+                  className="bg-primary/8 text-primary hover:bg-primary/16"
+                  onClick={() => setRunning(false)}
+                >
+                  Start over
+                </Button>
+                <Button
+                  size="lg"
+                  className="flex-1"
+                  onClick={() =>
+                    unit.odometerPhoto ? completeUnit() : openPhoto("after", "complete")
+                  }
+                >
+                  Complete Unit Fueling
+                  <CheckIcon size={20} />
+                </Button>
+              </>
             ) : (
               <>
                 <Button variant="errorSoft" size="lg" onClick={openCantFuel}>
