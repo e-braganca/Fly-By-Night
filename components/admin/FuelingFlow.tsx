@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
@@ -119,14 +119,25 @@ function PhotoTile({
   label,
   value,
   onChange,
+  onClick,
+  height = "h-36",
+  retake = false,
 }: {
   label: string;
   value?: string;
-  onChange: (dataUrl: string | undefined) => void;
+  onChange?: (dataUrl: string | undefined) => void;
+  /** When set, the tile opens this instead of the camera — used by the unit
+      screen, where a photo is always taken through its own dialog. */
+  onClick?: () => void;
+  height?: string;
+  /** Show the Retake pill over an existing photo, as the dialog does. */
+  retake?: boolean;
 }) {
   const ref = useRef<HTMLInputElement>(null);
+  const pick = () => (onClick ? onClick() : ref.current?.click());
+
   return (
-    <div className="flex-1">
+    <div className="min-w-0 flex-1">
       {label && <p className="mb-2 text-sm font-semibold text-text-primary">{label}</p>}
       <input
         ref={ref}
@@ -141,17 +152,25 @@ function PhotoTile({
           const file = e.target.files?.[0];
           if (!file) return;
           const reader = new FileReader();
-          reader.onload = () => onChange(reader.result as string);
+          reader.onload = () => onChange?.(reader.result as string);
           reader.readAsDataURL(file);
         }}
       />
       <button
-        onClick={() => ref.current?.click()}
-        className="relative grid h-36 w-full place-items-center overflow-hidden rounded-lg border border-dashed border-grey-400 bg-grey-500/8 text-grey-500 transition-colors hover:bg-grey-500/16"
+        onClick={pick}
+        className={`relative grid w-full ${height} place-items-center overflow-hidden rounded-lg border border-dashed border-grey-400 bg-grey-500/8 text-grey-500 transition-colors hover:bg-grey-500/16`}
       >
         {value ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={value} alt={label} className="h-full w-full object-cover" />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={value} alt={label} className="h-full w-full object-cover" />
+            {retake && (
+              <span className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white">
+                <CameraIcon size={16} />
+                Retake
+              </span>
+            )}
+          </>
         ) : (
           <span className="flex flex-col items-center gap-1">
             <CameraIcon size={28} />
@@ -194,12 +213,26 @@ function DialogMark({ children }: { children: ReactNode }) {
 }
 
 /*
-  The before-photo gate. Starting a unit without a photo of the equipment opens
-  this instead of starting the pump — the photo is the record that the unit was
-  found as described.
+  Every photo on a unit is taken through this dialog — from the tile, or from the
+  gate when the operator tries to start or finish without it. The image is held
+  as a draft so Cancel really discards it.
 */
-function BeforePhotoModal({
+const PHOTO_COPY = {
+  before: {
+    title: "Please take a photo of the equipment before proceeding!",
+    field: "equipmentPhoto",
+  },
+  after: {
+    title: "Please take a photo of the odometer after fueling!",
+    field: "odometerPhoto",
+  },
+} as const;
+
+type PhotoTarget = keyof typeof PHOTO_COPY;
+
+function PhotoModal({
   open,
+  target,
   equipment,
   value,
   onChange,
@@ -207,6 +240,7 @@ function BeforePhotoModal({
   onClose,
 }: {
   open: boolean;
+  target: PhotoTarget;
   equipment: FuelingEquipment | null;
   value?: string;
   onChange: (v: string | undefined) => void;
@@ -223,7 +257,7 @@ function BeforePhotoModal({
           <CameraIcon size={16} />
         </DialogMark>
       }
-      title="Please take a photo of the equipment before proceeding!"
+      title={PHOTO_COPY[target].title}
       bodyClassName="px-6 py-4"
       footer={
         <div className="flex justify-end gap-3">
@@ -244,7 +278,7 @@ function BeforePhotoModal({
         />
         <p className="text-lg font-bold text-text-primary">{equipment?.name}</p>
       </div>
-      <PhotoTile label="" value={value} onChange={onChange} />
+      <PhotoTile label="" value={value} onChange={onChange} height="h-52" retake />
     </Modal>
   );
 }
@@ -387,11 +421,41 @@ export function FuelingFlow({
   /** The current unit's pump is running — switches the unit screen to phase two. */
   const [running, setRunning] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const [photoGate, setPhotoGate] = useState(false);
+  /* Which photo the dialog is collecting, and what to do once it is accepted:
+     nothing when opened from the tile, start or finish the unit when opened as
+     a gate. `draft` keeps the image out of the unit until Accept. */
+  const [photoTask, setPhotoTask] = useState<
+    { target: PhotoTarget; then?: "start" | "complete" } | null
+  >(null);
+  const [photoDraft, setPhotoDraft] = useState<string | undefined>();
   const [cantFuel, setCantFuel] = useState(false);
   const [skipReason, setSkipReason] = useState("");
   const [skipNote, setSkipNote] = useState("");
   const [skipAll, setSkipAll] = useState(false);
+
+  /** Open the photo dialog for one of the unit's two photos. */
+  function openPhoto(target: PhotoTarget, then?: "start" | "complete") {
+    const current = active?.units[sel]?.[PHOTO_COPY[target].field];
+    setPhotoDraft(current);
+    setPhotoTask({ target, then });
+  }
+
+  /** Commit the drafted photo, then run whatever the gate was blocking. */
+  function acceptPhoto() {
+    if (!photoTask) return;
+    patchUnit({ [PHOTO_COPY[photoTask.target].field]: photoDraft });
+    const then = photoTask.then;
+    setPhotoTask(null);
+    setPhotoDraft(undefined);
+    if (then === "start") setRunning(true);
+    if (then === "complete") completeUnit();
+  }
+
+  /** Mark the unit fuelled and move on. */
+  function completeUnit() {
+    patchUnit({ done: true, skipped: false });
+    advanceUnit();
+  }
 
   /** Open the can't-fuel dialog on a blank form. */
   function openCantFuel() {
@@ -416,7 +480,9 @@ export function FuelingFlow({
   );
   const allDone = equips.length > 0 && equips.every((e) => e.completed);
 
-  const active = useMemo(() => equips.find((e) => e.id === activeId) ?? null, [equips, activeId]);
+  // Left to the compiler to memoize — a manual useMemo here makes it bail out
+  // of optimizing the whole component.
+  const active = equips.find((e) => e.id === activeId) ?? null;
   const shown = query
     ? equips.filter((e) => e.name.toLowerCase().includes(query.toLowerCase()))
     : equips;
@@ -584,16 +650,17 @@ export function FuelingFlow({
         dialog={
           <>
             {cancelDialog}
-            <BeforePhotoModal
-              open={photoGate}
+            <PhotoModal
+              open={Boolean(photoTask)}
+              target={photoTask?.target ?? "before"}
               equipment={active}
-              value={unit.equipmentPhoto}
-              onChange={(v) => patchUnit({ equipmentPhoto: v })}
-              onAccept={() => {
-                setPhotoGate(false);
-                setRunning(true);
+              value={photoDraft}
+              onChange={setPhotoDraft}
+              onAccept={acceptPhoto}
+              onClose={() => {
+                setPhotoTask(null);
+                setPhotoDraft(undefined);
               }}
-              onClose={() => setPhotoGate(false)}
             />
             <CantFuelModal
               open={cantFuel}
@@ -632,10 +699,9 @@ export function FuelingFlow({
               <Button
                 size="lg"
                 className="flex-1"
-                onClick={() => {
-                  patchUnit({ done: true, skipped: false });
-                  advanceUnit();
-                }}
+                onClick={() =>
+                  unit.odometerPhoto ? completeUnit() : openPhoto("after", "complete")
+                }
               >
                 Complete Unit Fueling
                 <CheckIcon size={20} />
@@ -648,7 +714,9 @@ export function FuelingFlow({
                 <Button
                   size="lg"
                   className="flex-1"
-                  onClick={() => (unit.equipmentPhoto ? setRunning(true) : setPhotoGate(true))}
+                  onClick={() =>
+                  unit.equipmentPhoto ? setRunning(true) : openPhoto("before", "start")
+                }
                 >
                   Start Fueling Unit
                   <DropletIcon size={20} />
@@ -687,12 +755,12 @@ export function FuelingFlow({
                 <PhotoTile
                   label="Equipment Before Fueling"
                   value={unit.equipmentPhoto}
-                  onChange={(v) => patchUnit({ equipmentPhoto: v })}
+                  onClick={() => openPhoto("before")}
                 />
                 <PhotoTile
-                  label="Equipment After Fueling"
+                  label="Odometer After Fueling"
                   value={unit.odometerPhoto}
-                  onChange={(v) => patchUnit({ odometerPhoto: v })}
+                  onClick={() => openPhoto("after")}
                 />
               </div>
 
