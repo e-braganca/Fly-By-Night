@@ -132,6 +132,10 @@ function PhotoTile({
         ref={ref}
         type="file"
         accept="image/*"
+        /* The operator is on a phone at the delivery, so go straight to the rear
+           camera rather than the file picker. Desktop browsers ignore `capture`
+           and fall back to the picker, which is the sensible behaviour there. */
+        capture="environment"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
