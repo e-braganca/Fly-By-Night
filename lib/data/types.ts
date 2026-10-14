@@ -1,5 +1,7 @@
 /* Shared domain types for the Fly by Night customer app. */
 
+import type { DeliveryPayment } from "./payment";
+
 export type WeekDay = {
   label: string;
   date: number;
@@ -170,4 +172,6 @@ export type ScheduledDelivery = {
   equipment: DeliveryEquipmentLine[];
   notes?: string;
   documents?: DeliveryDocument[];
+  /** How the customer chose to pay, from the request's payment step. */
+  payment?: DeliveryPayment;
 };

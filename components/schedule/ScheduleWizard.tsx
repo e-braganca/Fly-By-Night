@@ -14,6 +14,7 @@ import { MiniCalendar } from "@/components/schedule/MiniCalendar";
 import { WindowPicker, type DeliveryWindow } from "@/components/schedule/WindowPicker";
 import { UrgencyPicker } from "@/components/schedule/UrgencyPicker";
 import { ServiceAgreement } from "@/components/schedule/ServiceAgreement";
+import { PaymentStep } from "@/components/schedule/PaymentStep";
 import {
   EquipmentUnitPicker,
   selectedUnitCount,
@@ -46,6 +47,7 @@ import {
   computeCost,
   money,
   ratePerGallon,
+  convenienceFeeOn,
   OFF_ROAD_MIN,
   DEF_MAX,
   DEF_FLAT,
@@ -59,6 +61,12 @@ import {
 } from "@/lib/store";
 import type { Equipment, UrgencyTier } from "@/lib/data/types";
 import type { CustomerAccount } from "@/lib/data/customers";
+import {
+  EMPTY_CARD,
+  deliveryPayment,
+  type CardForm,
+  type PaymentMethod,
+} from "@/lib/data/payment";
 
 type AddressForm = {
   zip: string;
@@ -191,6 +199,11 @@ export function ScheduleWizard({
   const [showAccountPw, setShowAccountPw] = useState(false);
 
   const [done, setDone] = useState(false);
+  /* Customer and guest requests continue to a payment page before the order is
+     placed; admin books on the customer's behalf and skips it. */
+  const [step, setStep] = useState<"request" | "payment">("request");
+  const [payMethod, setPayMethod] = useState<PaymentMethod>("card");
+  const [card, setCard] = useState<CardForm>(EMPTY_CARD);
   const [adding, setAdding] = useState(false);
   const [editEquip, setEditEquip] = useState<Equipment | null>(null);
   const [deselected, setDeselected] = useState<Set<string>>(new Set());
@@ -271,6 +284,8 @@ export function ScheduleWizard({
       chosen.length > 0 &&
       (isGuest ? detailsConfirmed : isCustomer ? accepted : customer),
   );
+
+  const collectsPayment = isCustomer;
 
   const set = <K extends keyof AddressForm>(k: K, v: string) =>
     setAddr((a) => ({ ...a, [k]: v }));
@@ -361,7 +376,9 @@ export function ScheduleWizard({
       address: addressLine,
       urgency: tier,
       gallonsScheduled: orderGallons,
-      price: money(cost.total),
+      // A card on file carries the processing fee; paying on delivery doesn't yet.
+      price: money(cost.total + (collectsPayment && payMethod === "card" ? convenienceFeeOn(cost.total) : 0)),
+      payment: collectsPayment ? deliveryPayment(payMethod, card) : undefined,
       equipment: chosen.map(({ e, count }) => ({
         name: e.name,
         units: count,
@@ -378,6 +395,11 @@ export function ScheduleWizard({
         : undefined,
     });
     setDone(true);
+  }
+
+  function goToStep(next: "request" | "payment") {
+    setStep(next);
+    window.scrollTo({ top: 0 });
   }
 
   /** Guest flow: the account is created as part of placing the first order. */
@@ -421,6 +443,19 @@ export function ScheduleWizard({
 
   return (
     <div className="min-h-dvh bg-neutral">
+      {step === "payment" ? (
+        <PaymentStep
+          cost={cost}
+          gallons={gallons}
+          taxExempt={taxExempt === true}
+          method={payMethod}
+          onMethodChange={setPayMethod}
+          card={card}
+          onCardChange={setCard}
+          onBack={() => goToStep("request")}
+          onPlace={() => (isGuest ? setAccountOpen(true) : finish())}
+        />
+      ) : (
       <div className="mx-auto w-full max-w-[640px] px-5 pb-16 pt-8 sm:px-8">
         {/* Header */}
         <div className="flex flex-col items-center text-center">
@@ -1176,15 +1211,18 @@ export function ScheduleWizard({
                 size="lg"
                 className="flex-1"
                 disabled={!canPlace}
-                onClick={() => (isGuest ? setAccountOpen(true) : finish())}
+                onClick={() =>
+                  collectsPayment ? goToStep("payment") : isGuest ? setAccountOpen(true) : finish()
+                }
               >
-                Place Order
+                {collectsPayment ? "Continue to payment" : "Place Order"}
                 <ArrowRightIcon size={20} />
               </Button>
             </div>
           </div>
         </div>
       </div>
+      )}
 
       {/* Adding / editing an equipment both use the same modal. */}
       <EquipmentModal
