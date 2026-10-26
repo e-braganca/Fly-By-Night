@@ -61,6 +61,10 @@ type AppState = {
       request gates on it; later requests just offer a review. */
   agreementSigned: boolean;
 
+  /** Finance orders an admin has marked as paid this session, by order number,
+      with the date it was recorded. Overrides the ledger's own status. */
+  paidOrders: Record<number, string>;
+
   /** Settings */
   profile: Profile;
   business: BusinessInfo;
@@ -76,6 +80,7 @@ type AppState = {
   cancelDelivery: (id: string) => void;
   markDeliveryFueled: (address: string) => void;
   signAgreement: () => void;
+  markOrderPaid: (orderNo: number, dateISO: string) => void;
   /** Creating an account clears the signature so the wizard gates on it again. */
   resetAgreement: () => void;
 
@@ -97,6 +102,7 @@ export const useAppStore = create<AppState>((set) => ({
   notificationsOpen: false,
   fueledAddresses: [],
   agreementSigned: false,
+  paidOrders: {},
   profile: seedProfile,
   business: seedBusiness,
   notificationPrefs: seedNotificationPrefs,
@@ -154,6 +160,8 @@ export const useAppStore = create<AppState>((set) => ({
     ),
 
   signAgreement: () => set({ agreementSigned: true }),
+  markOrderPaid: (orderNo, dateISO) =>
+    set((s) => ({ paidOrders: { ...s.paidOrders, [orderNo]: dateISO } })),
   resetAgreement: () => set({ agreementSigned: false }),
 
   openNotifications: () => set({ notificationsOpen: true }),
@@ -186,6 +194,7 @@ export const useScheduledDeliveries = () =>
   useAppStore((s) => s.scheduledDeliveries);
 export const useFueledAddresses = () => useAppStore((s) => s.fueledAddresses);
 export const useAgreementSigned = () => useAppStore((s) => s.agreementSigned);
+export const usePaidOrders = () => useAppStore((s) => s.paidOrders);
 export const useProfile = () => useAppStore((s) => s.profile);
 export const useBusiness = () => useAppStore((s) => s.business);
 export const useNotificationPrefs = () =>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
+import { useWheelScrollX } from "@/lib/useWheelScrollX";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { DateField } from "@/components/ui/FilterField";
 import {
@@ -70,6 +71,7 @@ function Derived({ label, value }: { label: string; value: string }) {
 
 export default function FillMyTankPage() {
   const [rows, setRows] = useState<TankRefueling[]>(seedRefuelings);
+  const tableScroll = useWheelScrollX<HTMLDivElement>();
   const [deleteTarget, setDeleteTarget] = useState<TankRefueling | null>(null);
   const [pageSize, setPageSize] = useState(5);
   const [page, setPage] = useState(0);
@@ -177,7 +179,7 @@ export default function FillMyTankPage() {
       </div>
 
       {/* Table */}
-      <div className={`overflow-x-auto ${PAGE_FILL_BODY}`}>
+      <div className={`overflow-x-auto ${PAGE_FILL_BODY}`} ref={tableScroll}>
         <div className="min-w-[860px]">
           <div
             className="grid items-center gap-4 px-4 py-3 text-sm font-semibold text-text-secondary"

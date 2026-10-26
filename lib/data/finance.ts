@@ -105,7 +105,7 @@ export type FinanceOrder = {
 };
 
 const NEWEST_ORDER_NO = 871;
-const LEDGER_SIZE = 60;
+const LEDGER_SIZE = 120;
 
 /** Order ledger, newest first (index 0 = most recent, order #871). */
 export const financeOrders: FinanceOrder[] = (() => {
@@ -140,8 +140,9 @@ export const financeOrders: FinanceOrder[] = (() => {
     const cost = round2(gallons * wholesale);
     const margin = round2(taxable - cost);
 
-    // The four most recent orders are billed but not yet settled.
-    const status: ReceiptStatus = i < 4 ? "invoice_received" : "paid";
+    // The four most recent orders are billed but not yet settled, plus a couple
+    // of older invoices still outstanding, so there's something to chase.
+    const status: ReceiptStatus = i < 4 || i === 9 || i === 17 ? "invoice_received" : "paid";
 
     const delivery: ScheduledDelivery = {
       id: `fin-${orderNo}`,

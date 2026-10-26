@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
+import { useWheelScrollX } from "@/lib/useWheelScrollX";
 import { Button } from "@/components/ui/Button";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { StatCard, StatNumber, StatMoney } from "@/components/ui/StatCard";
@@ -28,6 +29,7 @@ export default function ReceiptsPage() {
   const deliveries = useScheduledDeliveries();
   const business = useBusiness();
   const [query, setQuery] = useState("");
+  const tableScroll = useWheelScrollX<HTMLDivElement>();
   const [pageSize, setPageSize] = useState(5);
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Receipt | null>(null);
@@ -95,7 +97,7 @@ export default function ReceiptsPage() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-x-auto">
+      <div className="flex-1 overflow-x-auto" ref={tableScroll}>
         <div className="min-w-[820px]">
           {/* Header */}
           <div

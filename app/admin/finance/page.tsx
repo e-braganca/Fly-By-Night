@@ -2,11 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { useWheelScrollX } from "@/lib/useWheelScrollX";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SelectField, DateField } from "@/components/ui/FilterField";
 import { StatCard, StatNumber, StatMoney } from "@/components/ui/StatCard";
 import { Menu } from "@/components/ui/Menu";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { Badge } from "@/components/ui/Badge";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   ChevronRightIcon,
   ChevronLeftIcon,
@@ -14,12 +17,15 @@ import {
   MoreVerticalIcon,
   DownloadIcon,
   FilePdfIcon,
+  CheckIcon,
+  ReceiptIcon,
 } from "@/components/ui/Icon";
 import { ReceiptDetailDrawer } from "@/components/customer/ReceiptDetailDrawer";
 import { PAGE_X, PAGE_Y, STICKY_HEADER, PAGE_MAX_WIDE, PAGE_FILL, PAGE_FILL_BODY } from "@/components/ui/layout";
 import { money } from "@/lib/data/receipts";
 import { downloadFinanceCsv, downloadFinancePdf } from "@/lib/financeExport";
-import { formatLongDate, URGENCY_OPTIONS, feeLabel } from "@/lib/data/schedule";
+import { formatLongDate, URGENCY_OPTIONS, feeLabel, REFERENCE_TODAY } from "@/lib/data/schedule";
+import { useAppStore, usePaidOrders } from "@/lib/store";
 import { customers, COUNTIES, type County } from "@/lib/data/customers";
 import { FL_STATE_TAX_RATE } from "@/lib/data/pricing";
 import {
@@ -57,8 +63,19 @@ const COLS = [
   "1fr",             // Total invoiced
   "0.95fr",          // Fuel cost
   "0.95fr",          // Margin
-  "128px",           // CTA
+  "142px",           // Status + row menu, pinned (see PINNED)
 ].join(" ");
+
+/* Status and the row menu stay on screen while the arithmetic scrolls under
+   them. Both live in one sticky cell: it bleeds over the row's side padding
+   and into the column gap, so nothing peeks out around it, and a soft shadow
+   marks the edge the columns slide beneath. Its background has to be opaque,
+   so the striped rows mix their tint into the page colour instead. */
+const PINNED_GRID = "grid grid-cols-[80px_30px] items-center gap-4";
+const PINNED =
+  "sticky right-0 z-[1] -my-3.5 -ml-4 -mr-4 self-stretch rounded-r-lg py-3.5 pl-4 pr-4 shadow-[-12px_0_12px_-12px_rgb(33_43_54/0.18)]";
+const PINNED_BG = "bg-neutral";
+const PINNED_BG_STRIPE = "bg-[color-mix(in_srgb,var(--color-grey-500)_8%,var(--color-neutral))]";
 
 /** What the margin on one order is made of: the markup on the fuel, plus the
     delivery fee, which carries no fuel cost of its own. */
@@ -123,9 +140,25 @@ export default function AdminFinancePage() {
   const [pageSize, setPageSize] = useState(5);
   const [page, setPage] = useState(0);
   const [receipt, setReceipt] = useState<FinanceOrder | null>(null);
+  const tableScroll = useWheelScrollX<HTMLDivElement>();
+  const [confirmPaid, setConfirmPaid] = useState<FinanceOrder | null>(null);
+  const paidOrders = usePaidOrders();
+  const markOrderPaid = useAppStore((s) => s.markOrderPaid);
+
+  /* The ledger's own status, overridden by anything marked paid here. The
+     receipt carries the status too, so the drawer agrees with the table. */
+  const orders = useMemo(
+    () =>
+      financeOrders.map((o) =>
+        o.status !== "paid" && paidOrders[o.orderNo]
+          ? { ...o, status: "paid" as const, receipt: { ...o.receipt, status: "paid" as const } }
+          : o,
+      ),
+    [paidOrders],
+  );
 
   const filtered = useMemo(() => {
-    const base = filterOrders(financeOrders, {
+    const base = filterOrders(orders, {
       customerId,
       county,
       fromISO,
@@ -135,7 +168,7 @@ export default function AdminFinancePage() {
     return [...base].sort((a, b) =>
       sortAsc ? a.orderNo - b.orderNo : b.orderNo - a.orderNo,
     );
-  }, [customerId, county, fromISO, toISO, query, sortAsc]);
+  }, [orders, customerId, county, fromISO, toISO, query, sortAsc]);
 
   // The KPI cards describe the filtered period, not just the visible page.
   const stats = useMemo(() => financeStats(filtered), [filtered]);
@@ -275,8 +308,8 @@ export default function AdminFinancePage() {
       </div>
 
       {/* Table */}
-      <div className={`overflow-x-auto ${PAGE_FILL_BODY}`}>
-        <div className="min-w-[1960px]">
+      <div className={`overflow-x-auto ${PAGE_FILL_BODY}`} ref={tableScroll}>
+        <div className="min-w-[1974px]">
           {/* Header */}
           <div
             className="grid items-center gap-4 px-4 py-3 text-sm font-semibold text-text-secondary"
@@ -307,7 +340,10 @@ export default function AdminFinancePage() {
             <span>Total Invoiced</span>
             <span>Fuel Cost</span>
             <span>Margin</span>
-            <span>See receipt</span>
+            <div className={`${PINNED} ${PINNED_BG} !-my-3 !py-3 ${PINNED_GRID}`}>
+              <span>Status</span>
+              <span className="sr-only">Actions</span>
+            </div>
           </div>
 
           {/* Rows */}
@@ -372,12 +408,49 @@ export default function AdminFinancePage() {
                   </span>
                 </Tooltip>
               </span>
-              <span>
-                <Button size="sm" onClick={() => setReceipt(o)}>
-                  See Receipt
-                  <ChevronRightIcon size={16} />
-                </Button>
-              </span>
+              <div
+                className={`${PINNED} ${i % 2 === 1 ? PINNED_BG_STRIPE : PINNED_BG} ${PINNED_GRID}`}
+              >
+                <span>
+                  {o.status === "paid" ? (
+                    <Badge tone="success">Paid</Badge>
+                  ) : (
+                    <Badge tone="warning">Not paid</Badge>
+                  )}
+                </span>
+                <Menu
+                  portal
+                  items={[
+                    {
+                      label: "See receipt",
+                      icon: <ReceiptIcon size={18} />,
+                      onSelect: () => setReceipt(o),
+                    },
+                    ...(o.status === "paid"
+                      ? []
+                      : [
+                          {
+                            label: "Mark as paid",
+                            icon: <CheckIcon size={18} />,
+                            onSelect: () => setConfirmPaid(o),
+                          },
+                        ]),
+                  ]}
+                  trigger={({ open, toggle }) => (
+                    <Button
+                      size="sm"
+                      variant="soft"
+                      onClick={toggle}
+                      aria-label={`Actions for order #${o.orderNo}`}
+                      aria-haspopup="menu"
+                      aria-expanded={open}
+                      className={`!w-[30px] !min-w-0 !px-0 ${open ? "!bg-grey-500/16" : ""}`}
+                    >
+                      <MoreVerticalIcon size={16} />
+                    </Button>
+                  )}
+                />
+              </div>
             </div>
           ))}
 
@@ -436,6 +509,23 @@ export default function AdminFinancePage() {
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(confirmPaid)}
+        onClose={() => setConfirmPaid(null)}
+        onConfirm={() => {
+          if (confirmPaid) markOrderPaid(confirmPaid.orderNo, REFERENCE_TODAY);
+          setConfirmPaid(null);
+        }}
+        title={`Mark order #${confirmPaid?.orderNo ?? ""} as paid?`}
+        description={
+          confirmPaid
+            ? `${confirmPaid.customerName} · ${money(confirmPaid.total)}. This records the invoice as settled.`
+            : undefined
+        }
+        confirmLabel="Mark as paid"
+        destructive={false}
+      />
 
       <ReceiptDetailDrawer
         open={Boolean(receipt)}

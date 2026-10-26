@@ -32,6 +32,7 @@ const COLUMNS = [
   "Total Invoiced",
   "Fuel Cost",
   "Margin",
+  "Status",
 ] as const;
 
 function rowValues(o: FinanceOrder): string[] {
@@ -53,6 +54,7 @@ function rowValues(o: FinanceOrder): string[] {
     o.total.toFixed(2),
     o.cost.toFixed(2),
     o.margin.toFixed(2),
+    o.status === "paid" ? "Paid" : "Not paid",
   ];
 }
 
@@ -113,7 +115,7 @@ export function downloadFinanceCsv({ orders, stats, period, scope }: ExportConte
 }
 
 export function downloadFinancePdf({ orders, stats, period, scope }: ExportContext) {
-  // A3 landscape: fourteen columns will not fit an A4 without shrinking the type
+  // A3 landscape: eighteen columns will not fit an A4 without shrinking the type
   // past readable. The sheet still prints fine scaled down to A4.
   const doc = new jsPDF({ unit: "pt", format: "a3", orientation: "landscape" });
   const pageW = doc.internal.pageSize.getWidth();
@@ -130,22 +132,23 @@ export function downloadFinancePdf({ orders, stats, period, scope }: ExportConte
   // Column x positions and alignment, tuned to the widest realistic value.
   const cols: { w: number; align: "left" | "right" }[] = [
     { w: 40, align: "left" },   // ID
-    { w: 112, align: "left" },  // Customer
-    { w: 64, align: "left" },   // County
-    { w: 78, align: "left" },   // Date
+    { w: 96, align: "left" },   // Customer
+    { w: 60, align: "left" },   // County
+    { w: 74, align: "left" },   // Date
     { w: 58, align: "right" },  // Gallons
     { w: 56, align: "right" },  // Fuel cost /gal
     { w: 52, align: "right" },  // Markup /gal
-    { w: 68, align: "right" },  // Fuel bill
-    { w: 76, align: "left" },   // Delivery tier
+    { w: 64, align: "right" },  // Fuel bill
+    { w: 70, align: "left" },   // Delivery tier
     { w: 54, align: "right" },  // Delivery fee
     { w: 58, align: "right" },  // State tax
     { w: 56, align: "right" },  // County tax
-    { w: 72, align: "right" },  // Subtotal
+    { w: 68, align: "right" },  // Subtotal
     { w: 56, align: "right" },  // Card fee
-    { w: 76, align: "right" },  // Invoiced
-    { w: 66, align: "right" },  // Fuel cost
+    { w: 72, align: "right" },  // Invoiced
+    { w: 64, align: "right" },  // Fuel cost
     { w: 62, align: "right" },  // Margin
+    { w: 50, align: "left" },   // Status
   ];
   const xs: number[] = [];
   let cursor = left;
