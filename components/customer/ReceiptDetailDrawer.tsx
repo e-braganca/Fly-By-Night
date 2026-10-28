@@ -4,6 +4,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { DownloadIcon } from "@/components/ui/Icon";
 import type { Receipt, ReceiptParty } from "@/lib/data/types";
+import type { ReceiptDocument } from "@/lib/receiptPdf";
 import { money } from "@/lib/data/receipts";
 import { formatLongDate } from "@/lib/data/schedule";
 import { downloadReceiptPdf } from "@/lib/receiptPdf";
@@ -38,26 +39,34 @@ function MetaRow({ label, value, bold }: { label: string; value: string; bold?: 
   );
 }
 
+/**
+ * One order's billing breakdown. `kind="invoice"` is the settled version of the
+ * same document: it adds when the payment was recorded and shows the balance
+ * cleared, and only makes sense for a paid order.
+ */
 export function ReceiptDetailDrawer({
   open,
   onClose,
   receipt,
+  kind = "receipt",
 }: {
   open: boolean;
   onClose: () => void;
   receipt: Receipt | null;
+  kind?: ReceiptDocument;
 }) {
+  const invoice = kind === "invoice";
   return (
     <Drawer
       open={open && Boolean(receipt)}
       onClose={onClose}
-      title="Receipt Detail"
+      title={invoice ? "Invoice Detail" : "Receipt Detail"}
       headerBorder
       footer={
         <Button
           size="lg"
           className="w-full"
-          onClick={() => receipt && downloadReceiptPdf(receipt)}
+          onClick={() => receipt && downloadReceiptPdf(receipt, kind)}
         >
           <DownloadIcon size={20} />
           Download as PDF
@@ -72,6 +81,14 @@ export function ReceiptDetailDrawer({
               <MetaRow label="Invoice number" value={`#${receipt.orderNo}`} bold />
               <MetaRow label="Date of issue" value={formatLongDate(receipt.dateISO)} />
               <MetaRow label="Date due" value={formatLongDate(receipt.dateISO)} />
+              {invoice && (
+                <>
+                  <MetaRow label="Status" value="Paid" bold />
+                  {receipt.paidISO && (
+                    <MetaRow label="Paid on" value={formatLongDate(receipt.paidISO)} />
+                  )}
+                </>
+              )}
             </div>
             <div className="flex gap-5">
               <Party title={receipt.seller.name} party={receipt.seller} />
@@ -103,6 +120,19 @@ export function ReceiptDetailDrawer({
                 {money(receipt.total)}
               </span>
             </div>
+
+            {invoice && (
+              <div className="flex flex-col gap-2 border-t border-divider pt-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Amount paid</span>
+                  <span className="font-semibold text-success-dark">{money(receipt.total)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Balance due</span>
+                  <span className="font-semibold text-text-primary">{money(0)}</span>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

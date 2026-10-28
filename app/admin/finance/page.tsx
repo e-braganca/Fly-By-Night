@@ -9,6 +9,7 @@ import { StatCard, StatNumber, StatMoney } from "@/components/ui/StatCard";
 import { Menu } from "@/components/ui/Menu";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { Badge } from "@/components/ui/Badge";
+import { Switch } from "@/components/ui/Switch";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   ChevronRightIcon,
@@ -19,11 +20,13 @@ import {
   FilePdfIcon,
   CheckIcon,
   ReceiptIcon,
+  InvoiceIcon,
 } from "@/components/ui/Icon";
 import { ReceiptDetailDrawer } from "@/components/customer/ReceiptDetailDrawer";
 import { PAGE_X, PAGE_Y, STICKY_HEADER, PAGE_MAX_WIDE, PAGE_FILL, PAGE_FILL_BODY } from "@/components/ui/layout";
 import { money } from "@/lib/data/receipts";
 import { downloadFinanceCsv, downloadFinancePdf } from "@/lib/financeExport";
+import type { ReceiptDocument } from "@/lib/receiptPdf";
 import { formatLongDate, URGENCY_OPTIONS, feeLabel, REFERENCE_TODAY } from "@/lib/data/schedule";
 import { useAppStore, usePaidOrders } from "@/lib/store";
 import { customers, COUNTIES, type County } from "@/lib/data/customers";
@@ -41,8 +44,8 @@ import {
    build-up as the finance sheet:
 
      gallons x (fuel cost + markup) = fuel bill
-     + delivery fee + state tax + county tax = subtotal
-     + card fee = total invoiced
+     + delivery fee + card fee = subtotal
+     + state tax + county tax (both on the subtotal) = total invoiced
      fuel bill + delivery fee - fuel cost = margin
 
    Wide on purpose: the point is to see every step side by side. */
@@ -56,10 +59,10 @@ const COLS = [
   "0.75fr",          // Markup /gal
   "0.95fr",          // Fuel bill
   "0.95fr",          // Delivery fee
+  "0.9fr",           // Card fee
+  "0.95fr",          // Subtotal
   "0.9fr",           // State tax
   "0.9fr",           // County tax
-  "0.95fr",          // Subtotal
-  "0.9fr",           // Card fee
   "1fr",             // Total invoiced
   "0.95fr",          // Fuel cost
   "0.95fr",          // Margin
@@ -139,7 +142,9 @@ export default function AdminFinancePage() {
   const [sortAsc, setSortAsc] = useState(false);
   const [pageSize, setPageSize] = useState(5);
   const [page, setPage] = useState(0);
-  const [receipt, setReceipt] = useState<FinanceOrder | null>(null);
+  const [unpaidOnly, setUnpaidOnly] = useState(false);
+  // The order whose document is open, and which one: the bill, or (once paid) its invoice.
+  const [doc, setDoc] = useState<{ order: FinanceOrder; kind: ReceiptDocument } | null>(null);
   const tableScroll = useWheelScrollX<HTMLDivElement>();
   const [confirmPaid, setConfirmPaid] = useState<FinanceOrder | null>(null);
   const paidOrders = usePaidOrders();
@@ -151,7 +156,12 @@ export default function AdminFinancePage() {
     () =>
       financeOrders.map((o) =>
         o.status !== "paid" && paidOrders[o.orderNo]
-          ? { ...o, status: "paid" as const, receipt: { ...o.receipt, status: "paid" as const } }
+          ? {
+              ...o,
+              status: "paid" as const,
+              paidISO: paidOrders[o.orderNo],
+              receipt: { ...o.receipt, status: "paid" as const, paidISO: paidOrders[o.orderNo] },
+            }
           : o,
       ),
     [paidOrders],
@@ -164,11 +174,12 @@ export default function AdminFinancePage() {
       fromISO,
       toISO,
       query,
+      unpaidOnly,
     });
     return [...base].sort((a, b) =>
       sortAsc ? a.orderNo - b.orderNo : b.orderNo - a.orderNo,
     );
-  }, [orders, customerId, county, fromISO, toISO, query, sortAsc]);
+  }, [orders, customerId, county, fromISO, toISO, query, unpaidOnly, sortAsc]);
 
   // The KPI cards describe the filtered period, not just the visible page.
   const stats = useMemo(() => financeStats(filtered), [filtered]);
@@ -190,6 +201,7 @@ export default function AdminFinancePage() {
         ? "All customers"
         : (customers.find((c) => c.id === customerId)?.name ?? "Customer"),
       county === "all" ? "All counties" : `${county} County`,
+      unpaidOnly ? "Not paid only" : null,
       query.trim() ? `Search: "${query.trim()}"` : null,
     ]
       .filter(Boolean)
@@ -238,7 +250,7 @@ export default function AdminFinancePage() {
             ]}
           />
         </div>
-        <div className="w-[calc(50%-6px)] sm:w-[150px]">
+        <div className="w-[calc(50%-6px)] sm:w-[140px]">
           <DateField
             label="Date - From"
             value={fromISO}
@@ -246,7 +258,7 @@ export default function AdminFinancePage() {
             onChange={onFilter(setFromISO)}
           />
         </div>
-        <div className="w-[calc(50%-6px)] sm:w-[150px]">
+        <div className="w-[calc(50%-6px)] sm:w-[140px]">
           <DateField
             label="Date - To"
             value={toISO}
@@ -255,13 +267,18 @@ export default function AdminFinancePage() {
           />
         </div>
 
-        <div className="min-w-[200px] flex-1 self-end">
+        <div className="min-w-[150px] flex-1 self-end">
           <SearchInput
             value={query}
             onChange={onFilter(setQuery)}
-            placeholder="Search for a receipt"
+            placeholder="Search orders"
           />
         </div>
+
+        <label className="flex h-10 shrink-0 cursor-pointer items-center gap-2 self-end text-sm font-medium text-text-primary">
+          <Switch checked={unpaidOnly} onChange={onFilter(setUnpaidOnly)} />
+          Not paid only
+        </label>
 
         <Menu
           items={[
@@ -333,10 +350,10 @@ export default function AdminFinancePage() {
             <span>Markup /gal</span>
             <span>Fuel Bill</span>
             <span>Delivery Fee</span>
+            <span>Card Fee</span>
+            <span>Subtotal</span>
             <span>State Tax</span>
             <span>County Tax</span>
-            <span>Subtotal</span>
-            <span>Card Fee</span>
             <span>Total Invoiced</span>
             <span>Fuel Cost</span>
             <span>Margin</span>
@@ -368,6 +385,8 @@ export default function AdminFinancePage() {
                 <br />
                 <span className="text-grey-500">{URGENCY_OPTIONS[o.urgency].title}</span>
               </span>
+              <span>{money(o.convenienceFee)}</span>
+              <span>{money(o.subtotal)}</span>
               <span className="leading-tight">
                 {money(o.stateTax)}
                 <br />
@@ -380,8 +399,6 @@ export default function AdminFinancePage() {
                   {formatTaxRate(o.taxRate - FL_STATE_TAX_RATE)}
                 </span>
               </span>
-              <span>{money(o.subtotal)}</span>
-              <span>{money(o.convenienceFee)}</span>
               <span className="font-semibold">{money(o.total)}</span>
               <span className="text-grey-600">{money(o.cost)}</span>
               <span>
@@ -424,10 +441,16 @@ export default function AdminFinancePage() {
                     {
                       label: "See receipt",
                       icon: <ReceiptIcon size={18} />,
-                      onSelect: () => setReceipt(o),
+                      onSelect: () => setDoc({ order: o, kind: "receipt" }),
                     },
                     ...(o.status === "paid"
-                      ? []
+                      ? [
+                          {
+                            label: "See invoice",
+                            icon: <InvoiceIcon size={18} />,
+                            onSelect: () => setDoc({ order: o, kind: "invoice" }),
+                          },
+                        ]
                       : [
                           {
                             label: "Mark as paid",
@@ -520,7 +543,7 @@ export default function AdminFinancePage() {
         title={`Mark order #${confirmPaid?.orderNo ?? ""} as paid?`}
         description={
           confirmPaid
-            ? `${confirmPaid.customerName} · ${money(confirmPaid.total)}. This records the invoice as settled.`
+            ? `${confirmPaid.customerName} · ${money(confirmPaid.total)}. This records the order as paid and issues its invoice.`
             : undefined
         }
         confirmLabel="Mark as paid"
@@ -528,9 +551,10 @@ export default function AdminFinancePage() {
       />
 
       <ReceiptDetailDrawer
-        open={Boolean(receipt)}
-        onClose={() => setReceipt(null)}
-        receipt={receipt?.receipt ?? null}
+        open={Boolean(doc)}
+        onClose={() => setDoc(null)}
+        receipt={doc?.order.receipt ?? null}
+        kind={doc?.kind}
       />
     </div>
   );

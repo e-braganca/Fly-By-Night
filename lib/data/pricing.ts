@@ -43,18 +43,15 @@ export const COUNTY_SURTAX: Record<County, number> = {
   Collier: 0,
 };
 
-/* Card-processing fee. The processor takes its cut of the whole amount that
-   runs through the card, so the rate applies to the tax-inclusive subtotal —
-   fuel, fees and sales tax — and the flat charge is added on top. The fee
-   itself is not taxed. */
+/* Card-processing fee: a rate on the amount it's charged against, plus a flat
+   charge. On the admin ledger that base is the fuel bill + delivery fee, and
+   the fee then joins the taxable subtotal (sales tax is charged on it). */
 export const CONVENIENCE_FEE_RATE = 0.03;
 export const CONVENIENCE_FEE_FLAT = 30;
 
-/** 3% of the tax-inclusive subtotal, plus $30. */
-export function convenienceFeeOn(subtotalWithTax: number): number {
-  return (
-    Math.round((subtotalWithTax * CONVENIENCE_FEE_RATE + CONVENIENCE_FEE_FLAT) * 100 + 1e-6) / 100
-  );
+/** 3% of `base`, plus $30. */
+export function convenienceFeeOn(base: number): number {
+  return Math.round((base * CONVENIENCE_FEE_RATE + CONVENIENCE_FEE_FLAT) * 100 + 1e-6) / 100;
 }
 
 /** Sales-tax rate for a delivery address, e.g. 0.065 in Palm Beach, 0.06 elsewhere. */

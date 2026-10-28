@@ -5,8 +5,12 @@ import type { Receipt } from "./data/types";
 import { money } from "./data/receipts";
 import { formatLongDate } from "./data/schedule";
 
-/** Generate and download a PDF for a receipt. */
-export function downloadReceiptPdf(receipt: Receipt) {
+/** Which document to produce: the bill, or its settled ("Paid") version. */
+export type ReceiptDocument = "receipt" | "invoice";
+
+/** Generate and download a PDF for a receipt, or for a paid order's invoice. */
+export function downloadReceiptPdf(receipt: Receipt, kind: ReceiptDocument = "receipt") {
+  const invoice = kind === "invoice";
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   const left = 48;
@@ -25,7 +29,7 @@ export function downloadReceiptPdf(receipt: Receipt) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(...grey);
-  doc.text("Receipt", right, y, { align: "right" });
+  doc.text(invoice ? "Invoice" : "Receipt", right, y, { align: "right" });
 
   y += 30;
   doc.setDrawColor(223, 227, 232);
@@ -38,6 +42,12 @@ export function downloadReceiptPdf(receipt: Receipt) {
     ["Invoice number", `#${receipt.orderNo}`],
     ["Date of issue", formatLongDate(receipt.dateISO)],
     ["Date due", formatLongDate(receipt.dateISO)],
+    ...(invoice
+      ? ([
+          ["Status", "Paid"],
+          ...(receipt.paidISO ? [["Paid on", formatLongDate(receipt.paidISO)]] : []),
+        ] as [string, string][])
+      : []),
   ];
   for (const [label, value] of meta) {
     doc.setFont("helvetica", "bold");
@@ -110,5 +120,21 @@ export function downloadReceiptPdf(receipt: Receipt) {
   doc.setTextColor(...blue);
   doc.text(money(receipt.total), right, y, { align: "right" });
 
-  doc.save(`receipt-${receipt.orderNo}.pdf`);
+  if (invoice) {
+    for (const [label, value] of [
+      ["Amount paid", money(receipt.total)],
+      ["Balance due", money(0)],
+    ]) {
+      y += 24;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(...grey);
+      doc.text(label, left, y);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...ink);
+      doc.text(value, right, y, { align: "right" });
+    }
+  }
+
+  doc.save(`${kind}-${receipt.orderNo}.pdf`);
 }

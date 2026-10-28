@@ -25,10 +25,10 @@ const COLUMNS = [
   "Fuel Bill",
   "Delivery Tier",
   "Delivery Fee",
+  "Card Fee",
+  "Subtotal",
   "State Tax",
   "County Tax",
-  "Subtotal",
-  "Card Fee",
   "Total Invoiced",
   "Fuel Cost",
   "Margin",
@@ -47,10 +47,10 @@ function rowValues(o: FinanceOrder): string[] {
     o.fuelSubtotal.toFixed(2),
     URGENCY_OPTIONS[o.urgency].title,
     o.deliveryFee.toFixed(2),
+    o.convenienceFee.toFixed(2),
+    o.subtotal.toFixed(2),
     o.stateTax.toFixed(2),
     o.countyTax.toFixed(2),
-    o.subtotal.toFixed(2),
-    o.convenienceFee.toFixed(2),
     o.total.toFixed(2),
     o.cost.toFixed(2),
     o.margin.toFixed(2),
@@ -141,10 +141,10 @@ export function downloadFinancePdf({ orders, stats, period, scope }: ExportConte
     { w: 64, align: "right" },  // Fuel bill
     { w: 70, align: "left" },   // Delivery tier
     { w: 54, align: "right" },  // Delivery fee
+    { w: 56, align: "right" },  // Card fee
+    { w: 68, align: "right" },  // Subtotal
     { w: 58, align: "right" },  // State tax
     { w: 56, align: "right" },  // County tax
-    { w: 68, align: "right" },  // Subtotal
-    { w: 56, align: "right" },  // Card fee
     { w: 72, align: "right" },  // Invoiced
     { w: 64, align: "right" },  // Fuel cost
     { w: 62, align: "right" },  // Margin

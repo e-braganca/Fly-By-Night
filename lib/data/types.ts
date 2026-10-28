@@ -150,6 +150,8 @@ export type Receipt = {
   lineItems: ReceiptLineItem[];
   /** id of the scheduled delivery this receipt was generated from. */
   relatedDeliveryId: string;
+  /** ISO date the payment was recorded (paid receipts only). */
+  paidISO?: string;
 };
 
 export type ScheduledDelivery = {

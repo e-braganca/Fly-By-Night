@@ -3,8 +3,8 @@
    numbers always reconcile.
 
    Pricing follows the posted model in ./pricing: the customer is billed
-   gallons x the posted per-gallon rate, plus the urgency delivery fee, plus
-   Florida sales tax on that taxable base. Wholesale cost is tracked per order so
+   gallons x the posted per-gallon rate, plus the urgency delivery fee, plus the
+   card-processing fee on those two, plus Florida sales tax on all three. Wholesale cost is tracked per order so
    the period KPIs can walk revenue down to net income. */
 
 import type {
@@ -88,11 +88,11 @@ export type FinanceOrder = {
   countyTax: number;
   /** Both tax shares together. */
   tax: number;
-  /** Fuel + fees + tax, before the card charge. */
+  /** Fuel + delivery fee + card fee — the base sales tax is charged on. */
   subtotal: number;
-  /** Card-processing surcharge: 3% of the tax-inclusive subtotal, plus $30. */
+  /** Card-processing fee: 3% of the fuel bill + delivery fee, plus $30. */
   convenienceFee: number;
-  /** Everything invoiced: fuel + fee + tax + convenience fee. */
+  /** Everything invoiced: subtotal + state and county tax. */
   total: number;
   /** What the fuel cost us at the rack — the order's cost of goods sold. */
   cost: number;
@@ -101,6 +101,8 @@ export type FinanceOrder = {
       state) and so is the card charge (it belongs to the processor). */
   margin: number;
   status: ReceiptStatus;
+  /** When the payment was recorded (paid orders only). */
+  paidISO?: string;
   receipt: Receipt;
 };
 
@@ -128,21 +130,25 @@ export const financeOrders: FinanceOrder[] = (() => {
       i % 11 === 5 ? "emergency_call_out" : i % 5 === 2 ? "after_hours_weekend" : "standard";
     const deliveryFee = URGENCY_OPTIONS[urgency].fee;
 
+    // Fuel + delivery, then the card fee on that, then sales tax on all three.
     const fuelSubtotal = round2(gallons * costPerGallon);
-    const taxable = round2(fuelSubtotal + deliveryFee);
+    const billed = round2(fuelSubtotal + deliveryFee);
+    const convenienceFee = convenienceFeeOn(billed);
+    const subtotal = round2(billed + convenienceFee);
     const taxRate = taxRateForCounty(customer.county);
-    const stateTax = round2(taxable * FL_STATE_TAX_RATE);
-    const countyTax = round2(taxable * COUNTY_SURTAX[customer.county]);
+    const stateTax = round2(subtotal * FL_STATE_TAX_RATE);
+    const countyTax = round2(subtotal * COUNTY_SURTAX[customer.county]);
     const tax = round2(stateTax + countyTax);
-    const subtotal = round2(taxable + tax);
-    const convenienceFee = convenienceFeeOn(subtotal);
-    const total = round2(subtotal + convenienceFee);
+    const total = round2(subtotal + tax);
     const cost = round2(gallons * wholesale);
-    const margin = round2(taxable - cost);
+    const margin = round2(billed - cost);
 
     // The four most recent orders are billed but not yet settled, plus a couple
     // of older invoices still outstanding, so there's something to chase.
     const status: ReceiptStatus = i < 4 || i === 9 || i === 17 ? "invoice_received" : "paid";
+    // Settled orders were paid a few days after delivery (never in the future).
+    const settled = shiftDays(iso, 2 + ((i * 5) % 9));
+    const paidISO = status === "paid" ? (settled > REFERENCE_TODAY ? REFERENCE_TODAY : settled) : undefined;
 
     const delivery: ScheduledDelivery = {
       id: `fin-${orderNo}`,
@@ -181,11 +187,25 @@ export const financeOrders: FinanceOrder[] = (() => {
       cost,
       margin,
       status,
-      receipt: buildReceipt(delivery, status, customer.name, {
-        label: `Florida sales tax (${formatTaxRate(taxRate)})`,
-        amount: tax,
-        note: `${formatTaxRate(taxRate)} of ${money(taxable)} • ${customer.county} County`,
-      }),
+      paidISO,
+      receipt: {
+        ...buildReceipt(
+          delivery,
+          status,
+          customer.name,
+          {
+            label: `Florida sales tax (${formatTaxRate(taxRate)})`,
+            amount: tax,
+            note: `${formatTaxRate(taxRate)} of ${money(subtotal)} • ${customer.county} County`,
+          },
+          {
+            label: "Card processing fee",
+            amount: convenienceFee,
+            note: `3% of ${money(billed)} + $30`,
+          },
+        ),
+        paidISO,
+      },
     });
 
     iso = shiftDays(iso, -(1 + ((i * 7 + 3) % 6))); // step back 1–6 days
@@ -208,6 +228,8 @@ export type FinanceFilters = {
   fromISO: string;
   toISO: string;
   query: string;
+  /** Only orders still waiting on payment. */
+  unpaidOnly?: boolean;
 };
 
 export function filterOrders(orders: FinanceOrder[], f: FinanceFilters): FinanceOrder[] {
@@ -215,6 +237,7 @@ export function filterOrders(orders: FinanceOrder[], f: FinanceFilters): Finance
   return orders.filter((o) => {
     if (f.customerId !== "all" && o.customerId !== f.customerId) return false;
     if (f.county !== "all" && o.county !== f.county) return false;
+    if (f.unpaidOnly && o.status === "paid") return false;
     if (f.fromISO && o.dateISO < f.fromISO) return false;
     if (f.toISO && o.dateISO > f.toISO) return false;
     if (q && !String(o.orderNo).includes(q) && !o.customerName.toLowerCase().includes(q))
