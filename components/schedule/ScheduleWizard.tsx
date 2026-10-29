@@ -47,7 +47,6 @@ import {
   computeCost,
   money,
   ratePerGallon,
-  convenienceFeeOn,
   OFF_ROAD_MIN,
   DEF_MAX,
   DEF_FLAT,
@@ -256,13 +255,14 @@ export function ScheduleWizard({
 
   const gallons = Math.max(0, Math.floor(Number(gallonsInput) || 0));
   const orderGallons = gallons;
-  const cost = computeCost({
+  const costInputs = {
     fuelType,
     gallons,
     addDef,
     taxExempt: taxExempt === true,
     urgencyFee: tier ? URGENCY_OPTIONS[tier].fee : 0,
-  });
+  };
+  const cost = computeCost(costInputs);
   const quantityOk = gallons > 0;
 
   // Zip is optional (customer directory addresses don't include it).
@@ -286,6 +286,8 @@ export function ScheduleWizard({
   );
 
   const collectsPayment = isCustomer;
+  // What the payment page quotes: a card adds its fee before tax is charged.
+  const payCost = computeCost({ ...costInputs, byCard: collectsPayment && payMethod === "card" });
 
   const set = <K extends keyof AddressForm>(k: K, v: string) =>
     setAddr((a) => ({ ...a, [k]: v }));
@@ -376,9 +378,10 @@ export function ScheduleWizard({
       address: addressLine,
       urgency: tier,
       gallonsScheduled: orderGallons,
-      // A card on file carries the processing fee; paying on delivery doesn't yet.
-      price: money(cost.total + (collectsPayment && payMethod === "card" ? convenienceFeeOn(cost.total) : 0)),
+      // A card on file carries the processing fee (taxed); paying on delivery doesn't yet.
+      price: money(payCost.total),
       payment: collectsPayment ? deliveryPayment(payMethod, card) : undefined,
+      addDef: addDef || undefined,
       equipment: chosen.map(({ e, count }) => ({
         name: e.name,
         units: count,
@@ -445,7 +448,7 @@ export function ScheduleWizard({
     <div className="min-h-dvh bg-neutral">
       {step === "payment" ? (
         <PaymentStep
-          cost={cost}
+          cost={payCost}
           gallons={gallons}
           taxExempt={taxExempt === true}
           method={payMethod}
@@ -1142,14 +1145,6 @@ export function ScheduleWizard({
                   <dt className="text-text-secondary">Fuel — {gallons} gal</dt>
                   <dd className="font-semibold text-text-primary">{money(cost.fuel)}</dd>
                 </div>
-                {cost.def > 0 && (
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-text-secondary">
-                      DEF top-off (up to {DEF_MAX} gal)
-                    </dt>
-                    <dd className="font-semibold text-text-primary">{money(cost.def)}</dd>
-                  </div>
-                )}
                 {cost.smallOrder > 0 && (
                   <div className="flex justify-between gap-4">
                     <dt className="text-text-secondary">Small-order fee (under {OFF_ROAD_MIN} gal)</dt>
@@ -1160,6 +1155,14 @@ export function ScheduleWizard({
                   <div className="flex justify-between gap-4">
                     <dt className="text-text-secondary">Delivery speed</dt>
                     <dd className="font-semibold text-text-primary">{money(cost.urgency)}</dd>
+                  </div>
+                )}
+                {cost.def > 0 && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-text-secondary">
+                      DEF top-off (up to {DEF_MAX} gal)
+                    </dt>
+                    <dd className="font-semibold text-text-primary">{money(cost.def)}</dd>
                   </div>
                 )}
                 {/* Sales tax split into its state and county parts. */}

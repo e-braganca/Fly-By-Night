@@ -8,6 +8,12 @@
   - Florida sales tax applies to taxable fuel and fees unless the customer has a
     valid exemption certificate (DR-13 resale or DR-97 agricultural) on file. It
     splits into the 6% state rate and Palm Beach County's 0.5% surtax.
+
+  An order total is built in this order:
+    1. Fuel — gallons × rate, plus the Small Order Fee below the minimum.
+    2. Flat fees — delivery speed (after-hours, emergency call-out), DEF top-off.
+    3. Card processing fee — on 1 + 2 only, never on tax.
+    4. Sales tax and county surtax — on 1 + 2 + 3.
 */
 
 import type { County } from "./customers";
@@ -43,9 +49,9 @@ export const COUNTY_SURTAX: Record<County, number> = {
   Collier: 0,
 };
 
-/* Card-processing fee: a rate on the amount it's charged against, plus a flat
-   charge. On the admin ledger that base is the fuel bill + delivery fee, and
-   the fee then joins the taxable subtotal (sales tax is charged on it). */
+/* Card-processing fee: a rate on the fuel and fees it's charged against (never
+   the tax), plus a flat charge. It then joins the taxable amount, since Florida
+   taxes any fee added to the sale. */
 export const CONVENIENCE_FEE_RATE = 0.03;
 export const CONVENIENCE_FEE_FLAT = 30;
 
@@ -100,7 +106,11 @@ export type CostBreakdown = {
   def: number;
   /** Urgency / delivery-speed surcharge. */
   urgency: number;
-  /** Sum subject to sales tax. */
+  /** Fuel and flat fees, before the card fee and tax. */
+  subtotal: number;
+  /** Card processing fee (0 unless paying by card). */
+  cardFee: number;
+  /** Sum subject to sales tax — the subtotal plus the card fee. */
   taxable: number;
   /** Florida state portion of the sales tax (0 when exempt). */
   stateTax: number;
@@ -121,15 +131,19 @@ export function computeCost(opts: {
   addDef?: boolean;
   taxExempt: boolean;
   urgencyFee: number;
+  /** Paying by card, which adds the processing fee before tax. */
+  byCard?: boolean;
 }): CostBreakdown {
-  const { fuelType, gallons, addDef = false, taxExempt, urgencyFee } = opts;
+  const { fuelType, gallons, addDef = false, taxExempt, urgencyFee, byCard = false } = opts;
 
   const fuel = gallons * ratePerGallon(fuelType);
   const belowMinimum = gallons > 0 && gallons < OFF_ROAD_MIN;
   const smallOrder = belowMinimum ? SMALL_ORDER_FEE : 0;
   const def = addDef ? DEF_FLAT : 0;
 
-  const taxable = fuel + smallOrder + def + urgencyFee;
+  const subtotal = fuel + smallOrder + urgencyFee + def;
+  const cardFee = byCard ? convenienceFeeOn(subtotal) : 0;
+  const taxable = subtotal + cardFee;
   const stateTax = taxExempt ? 0 : taxable * FL_STATE_TAX_RATE;
   const countyTax = taxExempt ? 0 : taxable * COUNTY_SURTAX_RATE;
   const tax = stateTax + countyTax;
@@ -139,6 +153,8 @@ export function computeCost(opts: {
     smallOrder,
     def,
     urgency: urgencyFee,
+    subtotal,
+    cardFee,
     taxable,
     stateTax,
     countyTax,

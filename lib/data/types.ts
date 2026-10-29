@@ -176,4 +176,6 @@ export type ScheduledDelivery = {
   documents?: DeliveryDocument[];
   /** How the customer chose to pay, from the request's payment step. */
   payment?: DeliveryPayment;
+  /** A DEF top-off was added to the delivery (billed at the flat rate). */
+  addDef?: boolean;
 };

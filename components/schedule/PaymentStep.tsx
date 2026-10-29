@@ -17,7 +17,6 @@ import {
   CONVENIENCE_FEE_RATE,
   DEF_MAX,
   OFF_ROAD_MIN,
-  convenienceFeeOn,
   money,
   type CostBreakdown,
 } from "@/lib/data/pricing";
@@ -31,7 +30,7 @@ import {
   type PaymentMethod,
 } from "@/lib/data/payment";
 
-const FEE_TERMS = `${CONVENIENCE_FEE_RATE * 100}% of the subtotal plus $${CONVENIENCE_FEE_FLAT}`;
+const FEE_TERMS = `${CONVENIENCE_FEE_RATE * 100}% of the fuel and fees plus $${CONVENIENCE_FEE_FLAT}`;
 
 /** Radio card for the pay-now / pay-later choice — same look as the urgency cards. */
 function ChoiceCard({
@@ -133,7 +132,6 @@ export function PaymentStep({
   const payingByCard = method === "card";
   const errors = payingByCard ? cardErrors(card, REFERENCE_TODAY) : {};
   const shown = tried ? errors : {};
-  const cardFee = payingByCard ? convenienceFeeOn(cost.total) : 0;
   const brand = cardBrand(card.number);
   const amex = brand === "American Express";
 
@@ -266,31 +264,30 @@ export function PaymentStep({
             <InfoIcon size={20} className="mt-px shrink-0 text-info" />
             <span>
               {payingByCard
-                ? `Card payments carry a processing fee of ${FEE_TERMS}, included in the total below.`
-                : `Paying by card at delivery adds a processing fee of ${FEE_TERMS} to the invoice.`}
+                ? `Card payments carry a processing fee of ${FEE_TERMS}. Sales tax applies to it, and it's included in the total below.`
+                : `Paying by card at delivery adds a processing fee of ${FEE_TERMS}, plus sales tax on it, to the invoice.`}
             </span>
           </div>
           <dl className="flex flex-col gap-3 rounded-2xl bg-white p-5 text-sm">
             <Row label={`Fuel — ${gallons} gal`}>{money(cost.fuel)}</Row>
-            {cost.def > 0 && <Row label={`DEF top-off (up to ${DEF_MAX} gal)`}>{money(cost.def)}</Row>}
             {cost.smallOrder > 0 && (
               <Row label={`Small-order fee (under ${OFF_ROAD_MIN} gal)`}>{money(cost.smallOrder)}</Row>
             )}
             {cost.urgency > 0 && <Row label="Delivery speed">{money(cost.urgency)}</Row>}
-            <Row label="Florida sales tax (6%)">{taxExempt ? <Exempt /> : money(cost.stateTax)}</Row>
-            <Row label="Palm Beach County surtax (0.5%)">{taxExempt ? <Exempt /> : money(cost.countyTax)}</Row>
+            {cost.def > 0 && <Row label={`DEF top-off (up to ${DEF_MAX} gal)`}>{money(cost.def)}</Row>}
+            {/* The card fee is figured on the fuel and fees, then taxed with them. */}
             {payingByCard && (
-              <>
-                <div className="border-t border-divider" />
-                <Row label="Subtotal">{money(cost.total)}</Row>
-                <Row label={`Card processing fee (${CONVENIENCE_FEE_RATE * 100}% + $${CONVENIENCE_FEE_FLAT})`}>
-                  {money(cardFee)}
-                </Row>
-              </>
+              <Row label={`Card processing fee (${CONVENIENCE_FEE_RATE * 100}% + $${CONVENIENCE_FEE_FLAT})`}>
+                {money(cost.cardFee)}
+              </Row>
             )}
             <div className="border-t border-divider" />
+            <Row label="Subtotal">{money(cost.taxable)}</Row>
+            <Row label="Florida sales tax (6%)">{taxExempt ? <Exempt /> : money(cost.stateTax)}</Row>
+            <Row label="Palm Beach County surtax (0.5%)">{taxExempt ? <Exempt /> : money(cost.countyTax)}</Row>
+            <div className="border-t border-divider" />
             <Row label="Estimated total" strong>
-              {money(cost.total + cardFee)}
+              {money(cost.total)}
             </Row>
           </dl>
         </section>
