@@ -77,7 +77,7 @@ export const SEGMENTS = [
     alt: "Fuelling a hospital emergency backup generator at night",
     eyebrow: "Critical Life-Support Power",
     title: "Hospital Emergency Backup",
-    desc: "Guaranteed critical fuel delivery for Palm Beach County hospitals, surgical centers, and emergency response clinics. When municipal grids fail, we ensure life-support backup generators stay continuously fueled.",
+    desc: "Prioritize critical fuel delivery for Palm Beach County hospitals, surgical centers, and emergency response clinics. When municipal grids fail, we ensure life-support backup generators stay continuously fueled.",
   },
   {
     img: "/landing/seg-agriculture.jpg",
