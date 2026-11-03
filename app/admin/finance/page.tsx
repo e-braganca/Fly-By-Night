@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { useWheelScrollX } from "@/lib/useWheelScrollX";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { SelectField, DateField } from "@/components/ui/FilterField";
-import { StatCard, StatNumber, StatMoney } from "@/components/ui/StatCard";
+import { StatCard, StatMoney } from "@/components/ui/StatCard";
 import { Menu } from "@/components/ui/Menu";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { Badge } from "@/components/ui/Badge";
@@ -195,17 +195,14 @@ export default function AdminFinancePage() {
   const exportContext = () => ({
     orders: filtered,
     stats,
-    period: `${formatLongDate(fromISO)} to ${formatLongDate(toISO)}`,
-    scope: [
-      customerId === "all"
-        ? "All customers"
-        : (customers.find((c) => c.id === customerId)?.name ?? "Customer"),
-      county === "all" ? "All counties" : `${county} County`,
-      unpaidOnly ? "Not paid only" : null,
-      query.trim() ? `Search: "${query.trim()}"` : null,
-    ]
-      .filter(Boolean)
-      .join("  •  "),
+    filters: [
+      ["Customer", customerId === "all" ? "All" : (customers.find((c) => c.id === customerId)?.name ?? "—")],
+      ["County", county === "all" ? "All" : county],
+      ["Date from", formatLongDate(fromISO)],
+      ["Date to", formatLongDate(toISO)],
+      ["Not paid only", unpaidOnly ? "Yes" : "No"],
+      ["Search", query.trim() || "—"],
+    ] as [string, string][],
   });
 
   /** Any filter change puts the table back on page one. */
@@ -222,7 +219,7 @@ export default function AdminFinancePage() {
         <h1 className="text-2xl font-bold text-text-primary sm:text-3xl">Finance</h1>
         <p className="mt-1 text-base text-text-secondary">
           Every delivery invoiced in the period, and what it left on the table
-          once fuel, running costs and sales tax are out.
+          once fuel, card fees and sales tax are out.
         </p>
       </div>
 
@@ -302,25 +299,32 @@ export default function AdminFinancePage() {
         />
       </div>
 
-      {/* KPI cards — revenue walked down to net income, left to right. */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Total Orders" labelLines={2}>
-          <StatNumber>{stats.orders}</StatNumber>
-        </StatCard>
-        <StatCard label="Period Total Revenue" labelLines={2}>
+      {/* KPI cards — what was billed, the three things that aren't ours to
+          keep, and the profit left after them. */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <StatCard label="Total Revenue">
           <StatMoney value={money(stats.revenue)} subtleCents />
         </StatCard>
-        <StatCard label="Period Gross Income" labelLines={2}>
-          <StatMoney value={money(stats.grossIncome)} subtleCents />
+        <StatCard label="Total Fuel Cost">
+          <StatMoney value={money(stats.fuelCost)} subtleCents />
         </StatCard>
-        <StatCard label="Period Operating Income" labelLines={2}>
-          <StatMoney value={money(stats.operatingIncome)} subtleCents />
+        <StatCard label="Total Stripe Fees">
+          <StatMoney value={money(stats.stripeFees)} subtleCents />
         </StatCard>
-        <StatCard label="Period Tax Owned" labelLines={2}>
-          <StatMoney value={money(stats.taxOwed)} subtleCents />
+        <StatCard
+          label="Total Taxes"
+          note={
+            // Each share wraps as a whole when the card gets narrow.
+            <span className="flex flex-wrap gap-x-3">
+              <span>State Tax {money(stats.stateTax)}</span>
+              <span>County Tax {money(stats.countyTax)}</span>
+            </span>
+          }
+        >
+          <StatMoney value={money(stats.taxes)} subtleCents />
         </StatCard>
-        <StatCard label="Period Net Income" labelLines={2}>
-          <StatMoney value={money(stats.netIncome)} subtleCents />
+        <StatCard label="Total Profit" tone="primary" className="col-span-2 xl:col-span-1">
+          <StatMoney value={money(stats.profit)} subtleCents className="text-white" />
         </StatCard>
       </div>
 

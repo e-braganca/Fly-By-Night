@@ -5,7 +5,7 @@
    Pricing follows the posted model in ./pricing: the customer is billed
    gallons x the posted per-gallon rate, plus the urgency delivery fee, plus the
    card-processing fee on those two, plus Florida sales tax on all three. Wholesale cost is tracked per order so
-   the period KPIs can walk revenue down to net income. */
+   the period KPIs can walk revenue down to profit. */
 
 import type {
   Receipt,
@@ -31,16 +31,6 @@ import {
    (4966.275) but sit a hair below it in binary, which would otherwise round
    down and disagree with the books by a cent. */
 const round2 = (n: number) => Math.round(n * 100 + (n >= 0 ? 1e-6 : -1e-6)) / 100;
-
-/** What it costs us to put one delivery on the road: driver time, truck diesel,
-    and the amortised slice of insurance and maintenance. Walks gross income down
-    to operating income. At the current margin this is covered by roughly 160
-    gallons, which is why the business sets a 200-gallon minimum. */
-export const OPERATING_COST_PER_DELIVERY = 128;
-
-/** Provision set aside on operating profit. Sales tax is NOT this — that money
-    was never ours. */
-export const INCOME_TAX_RATE = 0.21;
 
 export { formatTaxRate };
 
@@ -247,50 +237,38 @@ export function filterOrders(orders: FinanceOrder[], f: FinanceFilters): Finance
 }
 
 /**
- * The period figures behind the KPI cards.
+ * The period figures behind the KPI cards, walked from what was billed down to
+ * what the business keeps:
  *
- *   revenue   = fuel + fees, EXCLUDING sales tax. Tax collected from a customer
- *               is held for the state, so it is never revenue and never gets
- *               subtracted from profit further down.
- *   gross     = revenue, less what the fuel cost us at the rack
- *   operating = gross, less the cost of running the deliveries
- *   taxOwed   = sales tax collected and due to Florida — a liability shown so it
- *               can be set aside, deliberately NOT part of the chain above
- *   net       = operating, less the provision on that profit
+ *   revenue    = everything invoiced: fuel, fees, card fee and sales tax
+ *   fuelCost   = what the fuel cost us at the rack
+ *   stripeFees = the card-processing fee, passed straight to the processor
+ *   taxes      = state + county sales tax, held for Florida
+ *   profit     = revenue - fuelCost - stripeFees - taxes
  *
- * The chain is checkable end to end: revenue - cost = gross, gross - operatingCost
- * = operating, operating - incomeTax = net. The table's "Total Invoiced" column
- * sums to revenue + taxOwed.
+ * Profit is checkable against the table: it equals the Margin column summed,
+ * and revenue equals the Total Invoiced column summed.
  */
 export function financeStats(orders: FinanceOrder[]) {
-  const invoiced = round2(orders.reduce((s, o) => s + o.total, 0));
-  const taxOwed = round2(orders.reduce((s, o) => s + o.tax, 0));
-  const revenue = round2(invoiced - taxOwed);
-  const cost = round2(orders.reduce((s, o) => s + o.cost, 0));
-  const deliveryFees = round2(orders.reduce((s, o) => s + o.deliveryFee, 0));
-  const convenienceFees = round2(orders.reduce((s, o) => s + o.convenienceFee, 0));
-  const margin = round2(orders.reduce((s, o) => s + o.margin, 0));
-  const operatingCost = round2(orders.length * OPERATING_COST_PER_DELIVERY);
+  const sum = (pick: (o: FinanceOrder) => number) =>
+    round2(orders.reduce((s, o) => s + pick(o), 0));
 
-  const grossIncome = round2(revenue - cost);
-  const operatingIncome = round2(grossIncome - operatingCost);
-  const incomeTax = round2(Math.max(0, operatingIncome) * INCOME_TAX_RATE);
-  const netIncome = round2(operatingIncome - incomeTax);
+  const revenue = sum((o) => o.total);
+  const fuelCost = sum((o) => o.cost);
+  const stripeFees = sum((o) => o.convenienceFee);
+  const stateTax = sum((o) => o.stateTax);
+  const countyTax = sum((o) => o.countyTax);
+  const taxes = round2(stateTax + countyTax);
 
   return {
     orders: orders.length,
-    invoiced,
-    revenue,
-    grossIncome,
-    operatingIncome,
-    taxOwed,
-    deliveryFees,
-    convenienceFees,
-    margin,
-    incomeTax,
-    netIncome,
-    cost,
-    operatingCost,
     gallons: orders.reduce((s, o) => s + o.gallons, 0),
+    revenue,
+    fuelCost,
+    stripeFees,
+    taxes,
+    stateTax,
+    countyTax,
+    profit: round2(revenue - fuelCost - stripeFees - taxes),
   };
 }

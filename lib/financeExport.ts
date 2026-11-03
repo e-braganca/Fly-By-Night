@@ -2,6 +2,7 @@
 
 import { jsPDF } from "jspdf";
 import { formatLongDate, URGENCY_OPTIONS } from "./data/schedule";
+import { money } from "./data/receipts";
 import type { FinanceOrder, financeStats } from "./data/finance";
 
 type Stats = ReturnType<typeof financeStats>;
@@ -9,9 +10,8 @@ type Stats = ReturnType<typeof financeStats>;
 type ExportContext = {
   orders: FinanceOrder[];
   stats: Stats;
-  /** Human-readable description of the active filters, for the file header. */
-  period: string;
-  scope: string;
+  /** The active filters as label/value pairs, printed in the report header. */
+  filters: [string, string][];
 };
 
 const COLUMNS = [
@@ -58,24 +58,38 @@ function rowValues(o: FinanceOrder): string[] {
   ];
 }
 
-/** Summary rows shared by both formats, so the two exports can never disagree. */
-function summaryRows(stats: Stats): [string, string][] {
+/** The summary cards, shared by both formats so the two exports — and the
+    page's KPI cards — can never disagree. */
+function summaryCards(stats: Stats): { label: string; value: number; note?: string }[] {
   return [
-    ["Total orders", String(stats.orders)],
-    ["Total gallons", String(stats.gallons)],
-    ["Delivery fees collected", stats.deliveryFees.toFixed(2)],
-    ["Convenience fees collected", stats.convenienceFees.toFixed(2)],
-    ["Margin (fuel bill + fees, less fuel cost)", stats.margin.toFixed(2)],
-    ["Total revenue (excl. sales tax)", stats.revenue.toFixed(2)],
-    ["Fuel cost", stats.cost.toFixed(2)],
-    ["Gross income", stats.grossIncome.toFixed(2)],
-    ["Operating cost", stats.operatingCost.toFixed(2)],
-    ["Operating income", stats.operatingIncome.toFixed(2)],
-    ["Sales tax owed", stats.taxOwed.toFixed(2)],
-    ["Income tax provision", stats.incomeTax.toFixed(2)],
-    ["Net income", stats.netIncome.toFixed(2)],
-    ["Total invoiced (revenue + sales tax)", stats.invoiced.toFixed(2)],
+    { label: "Total Revenue", value: stats.revenue },
+    { label: "Total Fuel Cost", value: stats.fuelCost },
+    { label: "Total Stripe Fees", value: stats.stripeFees },
+    {
+      label: "Total Taxes",
+      value: stats.taxes,
+      note: `State Tax ${money(stats.stateTax)}     County Tax ${money(stats.countyTax)}`,
+    },
+    { label: "Total Profit", value: stats.profit },
   ];
+}
+
+/** "November 3, 2026, 3:05 PM EST" — when the report was produced, on Florida time. */
+function generatedAt(now = new Date()): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    })
+      .formatToParts(now)
+      .map((p) => [p.type, p.value]),
+  );
+  return `${parts.month} ${parts.day}, ${parts.year}, ${parts.hour}:${parts.minute} ${parts.dayPeriod} ${parts.timeZoneName}`;
 }
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -96,17 +110,25 @@ function csvCell(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-export function downloadFinanceCsv({ orders, stats, period, scope }: ExportContext) {
+export function downloadFinanceCsv({ orders, stats, filters }: ExportContext) {
   const lines: string[][] = [
-    ["Fly by Night Fuel - Finance"],
-    ["Period", period],
-    ["Scope", scope],
+    ["Fly by Night Fuel - Finance report"],
+    ["Generated", generatedAt()],
+    ...filters,
+    [],
+    ["Summary"],
+    ...summaryCards(stats).flatMap((c) => [
+      [c.label, c.value.toFixed(2)],
+      ...(c.label === "Total Taxes"
+        ? [
+            ["State Tax", stats.stateTax.toFixed(2)],
+            ["County Tax", stats.countyTax.toFixed(2)],
+          ]
+        : []),
+    ]),
     [],
     [...COLUMNS],
     ...orders.map(rowValues),
-    [],
-    ["Summary"],
-    ...summaryRows(stats),
   ];
 
   // Excel opens UTF-8 CSVs correctly only with a byte-order mark.
@@ -114,7 +136,7 @@ export function downloadFinanceCsv({ orders, stats, period, scope }: ExportConte
   triggerDownload(new Blob([body], { type: "text/csv;charset=utf-8" }), fileName("csv"));
 }
 
-export function downloadFinancePdf({ orders, stats, period, scope }: ExportContext) {
+export function downloadFinancePdf({ orders, stats, filters }: ExportContext) {
   // A3 landscape: eighteen columns will not fit an A4 without shrinking the type
   // past readable. The sheet still prints fine scaled down to A4.
   const doc = new jsPDF({ unit: "pt", format: "a3", orientation: "landscape" });
@@ -124,9 +146,12 @@ export function downloadFinancePdf({ orders, stats, period, scope }: ExportConte
   const right = pageW - 40;
 
   type RGB = readonly [number, number, number];
-  const ink: RGB = [33, 43, 54];
-  const grey: RGB = [99, 115, 129];
-  const blue: RGB = [57, 96, 213];
+  const ink: RGB = [33, 43, 54]; // #212B36
+  const grey: RGB = [99, 115, 129]; // grey-600
+  const faint: RGB = [145, 158, 171]; // grey-500
+  const blue: RGB = [57, 96, 213]; // primary
+  const onBlue: RGB = [213, 221, 246]; // primary-lighter, for captions on blue
+  const white: RGB = [255, 255, 255];
   const setColor = (c: RGB) => doc.setTextColor(c[0], c[1], c[2]);
 
   // Column x positions and alignment, tuned to the widest realistic value.
@@ -160,28 +185,80 @@ export function downloadFinancePdf({ orders, stats, period, scope }: ExportConte
 
   let y = 0;
 
-  function header() {
-    y = 52;
+  /** Title, generation time and the filters behind the numbers. */
+  function reportHeader() {
+    y = 48;
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    setColor(blue);
+    doc.setFontSize(11);
+    setColor(grey);
     doc.text("Fly by Night Fuel", left, y);
 
+    y += 28;
+    doc.setFontSize(22);
+    setColor(ink);
+    doc.text("Finance report", left, y);
+
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
+    doc.setFontSize(10);
     setColor(grey);
-    doc.text("Finance", right, y, { align: "right" });
+    doc.text(`Generated ${generatedAt()}`, right, y, { align: "right" });
 
-    y += 16;
-    doc.setFontSize(9);
-    doc.text(`${period}  •  ${scope}`, left, y);
+    // "Customer: All   County: All   Date from: …" — grey label, bold value.
+    y += 24;
+    let x = left;
+    for (const [label, value] of filters) {
+      doc.setFont("helvetica", "normal");
+      setColor(grey);
+      doc.text(`${label}: `, x, y);
+      x += doc.getTextWidth(`${label}: `);
+      doc.setFont("helvetica", "bold");
+      setColor(ink);
+      doc.text(value, x, y);
+      x += doc.getTextWidth(value) + 22;
+    }
+  }
 
-    y += 14;
-    doc.setDrawColor(223, 227, 232);
-    doc.line(left, y, right, y);
+  /** The five summary cards; the last, Total Profit, filled blue. */
+  function summary() {
+    const gap = 14;
+    const h = 70;
+    const top = y + 18;
+    const cards = summaryCards(stats);
+    const w = (right - left - gap * (cards.length - 1)) / cards.length;
+    cards.forEach((c, i) => {
+      const x = left + i * (w + gap);
+      const highlight = i === cards.length - 1;
+      if (highlight) {
+        doc.setFillColor(blue[0], blue[1], blue[2]);
+        doc.roundedRect(x, top, w, h, 8, 8, "F");
+      } else {
+        doc.setDrawColor(223, 227, 232);
+        doc.setLineWidth(1);
+        doc.roundedRect(x, top, w, h, 8, 8, "S");
+      }
 
-    // Column headings
-    y += 18;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      setColor(highlight ? onBlue : faint);
+      doc.text(c.label, x + 14, top + 20);
+
+      doc.setFontSize(18);
+      setColor(highlight ? white : blue);
+      doc.text(money(c.value), x + 14, top + 44);
+
+      if (c.note) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        setColor(highlight ? onBlue : grey);
+        doc.text(c.note, x + 14, top + 60);
+      }
+    });
+    y = top + h;
+  }
+
+  /** Column headings; repeated at the top of every page the table runs onto. */
+  function tableHeader() {
+    y += 28;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     setColor(ink);
@@ -190,19 +267,35 @@ export function downloadFinancePdf({ orders, stats, period, scope }: ExportConte
     });
     y += 6;
     doc.setDrawColor(223, 227, 232);
+    doc.setLineWidth(0.5);
     doc.line(left, y, right, y);
     y += 14;
   }
 
-  header();
+  /** Later pages keep a slim header so a loose sheet still says what it is. */
+  function continuationHeader() {
+    y = 48;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    setColor(grey);
+    doc.text("Fly by Night Fuel  •  Finance report", left, y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(filters.map(([l, v]) => `${l}: ${v}`).join("   "), right, y, { align: "right" });
+  }
+
+  reportHeader();
+  summary();
+  tableHeader();
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
 
   for (const o of orders) {
-    if (y > pageH - 70) {
+    if (y > pageH - 50) {
       doc.addPage();
-      header();
+      continuationHeader();
+      tableHeader();
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
     }
@@ -217,33 +310,6 @@ export function downloadFinancePdf({ orders, stats, period, scope }: ExportConte
       doc.text(text, cellX(i), y, { align: cols[i].align });
     });
     y += 16;
-  }
-
-  // Summary block
-  if (y > pageH - 180) {
-    doc.addPage();
-    header();
-  }
-  y += 10;
-  doc.setDrawColor(223, 227, 232);
-  doc.line(left, y, right, y);
-  y += 20;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  setColor(ink);
-  doc.text("Summary", left, y);
-  y += 16;
-
-  doc.setFontSize(9);
-  for (const [label, value] of summaryRows(stats)) {
-    const isTotal = label.startsWith("Net income");
-    doc.setFont("helvetica", isTotal ? "bold" : "normal");
-    setColor(isTotal ? ink : grey);
-    doc.text(label, left, y);
-    setColor(ink);
-    doc.text(value, left + 260, y, { align: "right" });
-    y += 14;
   }
 
   doc.save(fileName("pdf"));
