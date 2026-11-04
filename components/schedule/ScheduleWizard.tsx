@@ -139,18 +139,23 @@ function Section({
  * above the options and the options are outlined in red. Screen readers get it
  * as a group, named by `labelledBy` or `label`, with the message as its
  * description.
+ *
+ * `radius` matches the corners of the options inside, so the outline drawn
+ * around them curves with them instead of opening up at the corners.
  */
 function ChoiceGroup({
   id,
   labelledBy,
   label,
   error,
+  radius = "rounded-2xl",
   children,
 }: {
   id: string;
   labelledBy?: string;
   label?: string;
   error?: string;
+  radius?: "rounded-lg" | "rounded-2xl";
   children: ReactNode;
 }) {
   return (
@@ -169,7 +174,7 @@ function ChoiceGroup({
         </p>
       )}
       <div
-        className={`rounded-2xl transition-shadow ${
+        className={`${radius} transition-shadow ${
           error ? "ring-2 ring-error ring-offset-4 ring-offset-neutral" : ""
         }`}
       >
@@ -1124,7 +1129,7 @@ export function ScheduleWizard({
                       isEnabled={rule?.allowsDay}
                     />
                   </ChoiceGroup>
-                  <ChoiceGroup id="delivery-window" label="Time slot" error={errorFor("window")}>
+                  <ChoiceGroup id="delivery-window" label="Time slot" radius="rounded-lg" error={errorFor("window")}>
                     <WindowPicker value={win} onChange={setWin} enabled={rule?.windows} />
                   </ChoiceGroup>
                 </div>
