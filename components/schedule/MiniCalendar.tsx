@@ -74,6 +74,7 @@ export function MiniCalendar({
           return (
             <div key={i} className="flex h-10 items-center justify-center">
               <button
+                data-day={dayISO}
                 disabled={disabled}
                 onClick={() => onSelect(dayISO)}
                 className={`grid h-9 w-9 place-items-center rounded-full text-sm ${

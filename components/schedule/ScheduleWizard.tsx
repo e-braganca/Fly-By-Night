@@ -8,7 +8,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Modal } from "@/components/ui/Modal";
 import { SearchInput } from "@/components/ui/SearchInput";
-import { TextField, TextAreaField } from "@/components/ui/Field";
+import { TextField, TextAreaField, FieldError } from "@/components/ui/Field";
 import { EquipmentModal } from "@/components/customer/EquipmentModal";
 import { MiniCalendar } from "@/components/schedule/MiniCalendar";
 import { WindowPicker, type DeliveryWindow } from "@/components/schedule/WindowPicker";
@@ -107,26 +107,101 @@ function parseAddress(s: string): AddressForm {
 const ADDRESS_REVIEW_NOTE =
   "This delivery goes to a new address, so the request is placed under review. We'll confirm access before dispatch.";
 
-/** Section wrapper: numbered-free titled block used down the scrolling page. */
+/** Section wrapper: numbered-free titled block used down the scrolling page.
+    `id` makes it a scroll target and names its heading `${id}-title`. */
 function Section({
+  id,
   title,
   description,
   children,
 }: {
+  id?: string;
   title: string;
   description?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-4">
+    <section id={id} className="flex scroll-mt-6 flex-col gap-4">
       <div>
-        <h2 className="text-xl font-bold text-text-primary">{title}</h2>
+        <h2 id={id && `${id}-title`} className="text-xl font-bold text-text-primary">
+          {title}
+        </h2>
         {description && <p className="mt-1 text-sm text-text-secondary">{description}</p>}
       </div>
       {children}
     </section>
   );
 }
+
+/**
+ * A set of options the customer has to pick from (fuel, urgency, date, slot,
+ * equipment). While it's missing after a submit attempt, the message sits
+ * above the options and the options are outlined in red. Screen readers get it
+ * as a group, named by `labelledBy` or `label`, with the message as its
+ * description.
+ */
+function ChoiceGroup({
+  id,
+  labelledBy,
+  label,
+  error,
+  children,
+}: {
+  id: string;
+  labelledBy?: string;
+  label?: string;
+  error?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      id={id}
+      role="group"
+      aria-labelledby={labelledBy}
+      aria-label={label}
+      aria-describedby={error ? `${id}-error` : undefined}
+      className="flex scroll-mt-6 flex-col gap-2"
+    >
+      {error && (
+        <p id={`${id}-error`} className="flex items-start gap-1.5 text-sm font-medium text-error-dark">
+          <AlertTriangleIcon size={16} className="mt-0.5 shrink-0" />
+          {error}
+        </p>
+      )}
+      <div
+        className={`rounded-2xl transition-shadow ${
+          error ? "ring-2 ring-error ring-offset-4 ring-offset-neutral" : ""
+        }`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const EMAIL_PATTERN = /\S+@\S+\.\S+/;
+
+/** Required address fields, as the error messages name them. ZIP is optional. */
+const ADDRESS_FIELDS = [
+  ["house", "house number"],
+  ["street", "street name"],
+  ["city", "city"],
+  ["state", "state"],
+  ["country", "country"],
+] as const;
+
+/** Something the request still needs, in the order it appears on the page. */
+type MissingItem = {
+  key: string;
+  message: string;
+  /** Element scrolled into view: the section for groups, the field for inputs. */
+  anchor: string;
+  block: ScrollLogicalPosition;
+  /** Selectors tried in turn for what takes focus. */
+  focus: string[];
+  /** Text inputs only show their error again once the customer leaves them. */
+  text?: boolean;
+};
 
 export type ScheduleWizardProps = {
   /**
@@ -239,7 +314,7 @@ export function ScheduleWizard({
   const guestDetailsValid =
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
-    /\S+@\S+\.\S+/.test(guestEmail.trim());
+    EMAIL_PATTERN.test(guestEmail.trim());
   const canConfirmDetails = accepted && guestDetailsValid;
   const gated = isGuest ? !detailsConfirmed : isCustomer && !accepted;
   /* Nothing is priced for a guest until we know who's asking. */
@@ -289,8 +364,180 @@ export function ScheduleWizard({
   // What the payment page quotes: a card adds its fee before tax is charged.
   const payCost = computeCost({ ...costInputs, byCard: collectsPayment && payMethod === "card" });
 
+  /* Customer and guest: "Continue to payment" is always enabled. Selecting it
+     with something missing marks every missing item and takes the customer to
+     the first one, instead of a disabled button that never says why. */
+  const missing: MissingItem[] = [];
+  if (isCustomer) {
+    if (!accepted)
+      missing.push({
+        key: "agreement",
+        message: "Accept the Service Agreement & Terms to continue.",
+        anchor: "agreement",
+        block: "center",
+        focus: ["#agreement-checkbox"],
+      });
+    if (isGuest && !detailsConfirmed) {
+      const email = guestEmail.trim();
+      const guestFields: [string, string, string | null][] = [
+        ["guest-first-name", "Enter your first name.", firstName.trim() ? null : "empty"],
+        ["guest-last-name", "Enter your last name.", lastName.trim() ? null : "empty"],
+        [
+          "guest-email",
+          email ? "Enter an email address like name@company.com." : "Enter your email address.",
+          EMAIL_PATTERN.test(email) ? null : "invalid",
+        ],
+      ];
+      for (const [id, message, problem] of guestFields)
+        if (problem)
+          missing.push({ key: id, message, anchor: id, block: "center", focus: [`#${id}`], text: true });
+      if (guestDetailsValid)
+        missing.push({
+          key: "guest-confirm",
+          message: "Confirm your details to continue.",
+          anchor: "guest-confirm",
+          block: "center",
+          focus: ["#guest-confirm"],
+        });
+    }
+  }
+  // Everything below the agreement stays locked until it's accepted, so it only
+  // counts once it's open.
+  if (isCustomer && !gated) {
+    if (!fuelType)
+      missing.push({
+        key: "fuel",
+        message: "Choose the fuel you need.",
+        anchor: "fuel-type",
+        block: "start",
+        focus: ["#fuel-type-options button"],
+      });
+    if (!quantityOk)
+      missing.push({
+        key: "gallons",
+        message: "Enter how many gallons you need.",
+        anchor: "gallons",
+        block: "center",
+        focus: ["#gallons"],
+        text: true,
+      });
+    if (!tier)
+      missing.push({
+        key: "urgency",
+        message: "Choose how soon you need the delivery.",
+        anchor: "urgency",
+        block: "start",
+        focus: ["#urgency-options button"],
+      });
+    if (!dateISO)
+      missing.push({
+        key: "date",
+        message: "Choose a delivery date.",
+        anchor: "delivery-when",
+        block: "start",
+        focus: ["#delivery-date [data-day]:not(:disabled)"],
+      });
+    if (!win)
+      missing.push({
+        key: "window",
+        message: "Choose a time slot.",
+        anchor: "delivery-window",
+        block: "center",
+        focus: ["#delivery-window button:not(:disabled)"],
+      });
+    if (!addressConfirmed || !addrValid) {
+      for (const [field, name] of ADDRESS_FIELDS)
+        if (!addr[field].trim())
+          missing.push({
+            key: field,
+            message: `Enter the ${name}.`,
+            anchor: field,
+            block: "center",
+            focus: [`#${field}`],
+            text: true,
+          });
+      if (addrValid)
+        missing.push({
+          key: "address-confirm",
+          message: "Confirm the delivery address.",
+          anchor: "address-confirm",
+          block: "center",
+          focus: ["#address-confirm"],
+        });
+    }
+    if (chosen.length === 0)
+      missing.push({
+        key: "equipment",
+        message: "Select at least one piece of equipment to fuel.",
+        anchor: "equipment",
+        block: "start",
+        focus: ["#equipment [role=switch]", "#equipment button"],
+      });
+  }
+
+  /* Nothing is marked until the first attempt. After it, choices show their
+     error for as long as they're missing; a text field that's been fixed only
+     shows it again once the customer leaves it, not mid-typing. */
+  const [attempted, setAttempted] = useState(false);
+  const [flagged, setFlagged] = useState<Set<string>>(new Set());
+  const missingByKey = new Map(missing.map((m) => [m.key, m]));
+  function errorFor(key: string): string | undefined {
+    const m = missingByKey.get(key);
+    if (!attempted || !m) return undefined;
+    return m.text && !flagged.has(key) ? undefined : m.message;
+  }
+  const errorCount = missing.filter((m) => errorFor(m.key)).length;
+
+  /** A text field's value changed: once it's valid, its error goes. */
+  function fixed(key: string, valid: boolean) {
+    if (valid && flagged.has(key))
+      setFlagged((f) => {
+        const next = new Set(f);
+        next.delete(key);
+        return next;
+      });
+  }
+  /** A text field lost focus: still missing after an attempt, so it shows again. */
+  function left(key: string) {
+    if (attempted && missingByKey.has(key) && !flagged.has(key))
+      setFlagged((f) => new Set(f).add(key));
+  }
+
+  function goTo(item: MissingItem) {
+    const anchor = document.getElementById(item.anchor);
+    const target =
+      item.focus.map((sel) => document.querySelector<HTMLElement>(sel)).find(Boolean) ?? anchor;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    anchor?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: item.block });
+    target?.focus({ preventScroll: true });
+  }
+
+  function continueToPayment() {
+    if (missing.length === 0) {
+      goToStep("payment");
+      return;
+    }
+    setAttempted(true);
+    setFlagged(new Set(missing.filter((m) => m.text).map((m) => m.key)));
+    // An address on file that's incomplete opens back up so it can be fixed.
+    if (addressConfirmed && !addrValid) setAddressConfirmed(false);
+    // Wait a frame so a section that just opened is in the page before moving to it.
+    requestAnimationFrame(() => goTo(missing[0]));
+  }
+
   const set = <K extends keyof AddressForm>(k: K, v: string) =>
     setAddr((a) => ({ ...a, [k]: v }));
+
+  /** Value, error and handlers for one required address field. */
+  const addressField = (k: (typeof ADDRESS_FIELDS)[number][0]) => ({
+    value: addr[k],
+    error: errorFor(k),
+    onBlur: () => left(k),
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      set(k, e.target.value);
+      fixed(k, e.target.value.trim().length > 0);
+    },
+  });
 
   const setDraft = <K extends keyof AddressForm>(k: K, v: string) =>
     setDraftAddr((a) => ({ ...a, [k]: v }));
@@ -517,9 +764,16 @@ export function ScheduleWizard({
                 <div className="max-h-[380px] overflow-y-auto rounded-xl border border-grey-500/16 p-4">
                   <ServiceAgreement />
                 </div>
-                <label className="mt-4 flex cursor-pointer items-start gap-3">
+                <label id="agreement" className="mt-4 flex scroll-mt-6 cursor-pointer items-start gap-3">
                   <span className="pt-0.5">
-                    <Checkbox checked={accepted} onChange={acceptAgreement} aria-label="Accept the Service Agreement" />
+                    <Checkbox
+                      id="agreement-checkbox"
+                      checked={accepted}
+                      onChange={acceptAgreement}
+                      invalid={Boolean(errorFor("agreement"))}
+                      aria-label="Accept the Service Agreement"
+                      aria-describedby={errorFor("agreement") ? "agreement-error" : undefined}
+                    />
                   </span>
                   <span className="text-sm text-text-primary">
                     I have read and agree to the{" "}
@@ -527,6 +781,7 @@ export function ScheduleWizard({
                     authorized to bind the customer. No delivery is made until this is accepted.
                   </span>
                 </label>
+                <FieldError id="agreement-error">{errorFor("agreement")}</FieldError>
 
                 {/* Guest flow: we don't know who this is yet, so collect it here.
                     Confirming unlocks the rest of the form and the pricing. */}
@@ -545,7 +800,12 @@ export function ScheduleWizard({
                           placeholder="Zoe"
                           value={firstName}
                           disabled={detailsConfirmed}
-                          onChange={(e) => setFirstName(e.target.value)}
+                          error={errorFor("guest-first-name")}
+                          onBlur={() => left("guest-first-name")}
+                          onChange={(e) => {
+                            setFirstName(e.target.value);
+                            fixed("guest-first-name", e.target.value.trim().length > 0);
+                          }}
                         />
                         <TextField
                           id="guest-last-name"
@@ -554,7 +814,12 @@ export function ScheduleWizard({
                           placeholder="Harris"
                           value={lastName}
                           disabled={detailsConfirmed}
-                          onChange={(e) => setLastName(e.target.value)}
+                          error={errorFor("guest-last-name")}
+                          onBlur={() => left("guest-last-name")}
+                          onChange={(e) => {
+                            setLastName(e.target.value);
+                            fixed("guest-last-name", e.target.value.trim().length > 0);
+                          }}
                         />
                       </div>
                       <TextField
@@ -565,7 +830,12 @@ export function ScheduleWizard({
                         placeholder="zoe@company.com"
                         value={guestEmail}
                         disabled={detailsConfirmed}
-                        onChange={(e) => setGuestEmail(e.target.value)}
+                        error={errorFor("guest-email")}
+                        onBlur={() => left("guest-email")}
+                        onChange={(e) => {
+                          setGuestEmail(e.target.value);
+                          fixed("guest-email", EMAIL_PATTERN.test(e.target.value.trim()));
+                        }}
                       />
                     </div>
 
@@ -587,15 +857,20 @@ export function ScheduleWizard({
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        size="lg"
-                        className="mt-4 w-full"
-                        disabled={!canConfirmDetails}
-                        onClick={() => setDetailsConfirmed(true)}
-                      >
-                        Confirm my details
-                        <ArrowRightIcon size={20} />
-                      </Button>
+                      <>
+                        <Button
+                          id="guest-confirm"
+                          size="lg"
+                          className="mt-4 w-full scroll-mt-6"
+                          disabled={!canConfirmDetails}
+                          aria-describedby={errorFor("guest-confirm") ? "guest-confirm-error" : undefined}
+                          onClick={() => setDetailsConfirmed(true)}
+                        >
+                          Confirm my details
+                          <ArrowRightIcon size={20} />
+                        </Button>
+                        <FieldError id="guest-confirm-error">{errorFor("guest-confirm")}</FieldError>
+                      </>
                     )}
                     {!accepted && guestDetailsValid && (
                       <p className="mt-2 text-xs font-medium text-secondary-dark">
@@ -642,12 +917,18 @@ export function ScheduleWizard({
                 </div>
               )}
 
-              <label className="mt-4 flex cursor-pointer items-start gap-3 border-t border-divider pt-4">
+              <label
+                id="agreement"
+                className="mt-4 flex scroll-mt-6 cursor-pointer items-start gap-3 border-t border-divider pt-4"
+              >
                 <span className="pt-0.5">
                   <Checkbox
+                    id="agreement-checkbox"
                     checked={accepted}
                     onChange={acceptAgreement}
+                    invalid={Boolean(errorFor("agreement"))}
                     aria-label="Accept the Service Agreement"
+                    aria-describedby={errorFor("agreement") ? "agreement-error" : undefined}
                   />
                 </span>
                 <span className="text-sm text-text-primary">
@@ -656,6 +937,7 @@ export function ScheduleWizard({
                   for this delivery.
                 </span>
               </label>
+              <FieldError id="agreement-error">{errorFor("agreement")}</FieldError>
             </div>
           )}
 
@@ -675,9 +957,11 @@ export function ScheduleWizard({
 
             <div className="flex flex-col gap-8">
               <Section
+                id="fuel-type"
                 title="What are we bringing?"
                 description="Pick the product for this delivery."
               >
+                <ChoiceGroup id="fuel-type-options" labelledBy="fuel-type-title" error={errorFor("fuel")}>
                 <div className="grid gap-4 sm:grid-cols-2">
                   {FUEL_TYPES.map((f) => {
                     const selected = fuelType === f.id;
@@ -719,6 +1003,7 @@ export function ScheduleWizard({
                     );
                   })}
                 </div>
+                </ChoiceGroup>
               </Section>
 
               <Section
@@ -744,12 +1029,20 @@ export function ScheduleWizard({
                           inputMode="numeric"
                           placeholder="0"
                           value={gallonsInput}
-                          onChange={(e) =>
-                            setGallonsInput(e.target.value.replace(/\D/g, "").slice(0, 6))
-                          }
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+                            setGallonsInput(v);
+                            fixed("gallons", Number(v) > 0);
+                          }}
+                          onBlur={() => left("gallons")}
                           disabled={!fuelType}
-                          className="w-full rounded-lg border border-grey-300 bg-white px-3 py-2.5 text-2xl font-bold text-text-primary outline-none transition-colors placeholder:text-text-disabled focus:border-primary disabled:opacity-50"
+                          aria-invalid={errorFor("gallons") ? true : undefined}
+                          aria-describedby={errorFor("gallons") ? "gallons-error" : undefined}
+                          className={`w-full scroll-mt-6 rounded-lg border bg-white px-3 py-2.5 text-2xl font-bold text-text-primary outline-none transition-colors placeholder:text-text-disabled disabled:opacity-50 ${
+                            errorFor("gallons") ? "border-error" : "border-grey-300 focus:border-primary"
+                          }`}
                         />
+                        <FieldError id="gallons-error">{errorFor("gallons")}</FieldError>
                       </div>
                       {showPrices && (
                         <div className="pb-2 text-right">
@@ -814,20 +1107,26 @@ export function ScheduleWizard({
                 </div>
               </Section>
 
-              <Section title="How urgent is the delivery?" description="Choose how quickly you need this fuel delivery.">
-                <UrgencyPicker value={tier} onChange={chooseTier} showFee={showPrices} />
+              <Section id="urgency" title="How urgent is the delivery?" description="Choose how quickly you need this fuel delivery.">
+                <ChoiceGroup id="urgency-options" labelledBy="urgency-title" error={errorFor("urgency")}>
+                  <UrgencyPicker value={tier} onChange={chooseTier} showFee={showPrices} />
+                </ChoiceGroup>
               </Section>
 
-              <Section title="When do you want the delivery?" description="Select the date and time slot for the delivery.">
+              <Section id="delivery-when" title="When do you want the delivery?" description="Select the date and time slot for the delivery.">
                 <div className="flex flex-col gap-5">
-                  <MiniCalendar
-                    selectedISO={dateISO}
-                    onSelect={setDateISO}
-                    initialView={{ y: refMonth.y, m: refMonth.m }}
-                    minISO={REFERENCE_TODAY}
-                    isEnabled={rule?.allowsDay}
-                  />
-                  <WindowPicker value={win} onChange={setWin} enabled={rule?.windows} />
+                  <ChoiceGroup id="delivery-date" label="Delivery date" error={errorFor("date")}>
+                    <MiniCalendar
+                      selectedISO={dateISO}
+                      onSelect={setDateISO}
+                      initialView={{ y: refMonth.y, m: refMonth.m }}
+                      minISO={REFERENCE_TODAY}
+                      isEnabled={rule?.allowsDay}
+                    />
+                  </ChoiceGroup>
+                  <ChoiceGroup id="delivery-window" label="Time slot" error={errorFor("window")}>
+                    <WindowPicker value={win} onChange={setWin} enabled={rule?.windows} />
+                  </ChoiceGroup>
                 </div>
               </Section>
 
@@ -925,14 +1224,14 @@ export function ScheduleWizard({
                       )}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <TextField id="house" label="House Number" value={addr.house} onChange={(e) => set("house", e.target.value)} />
-                      <TextField id="street" label="Street Name" value={addr.street} onChange={(e) => set("street", e.target.value)} />
+                      <TextField id="house" label="House Number" {...addressField("house")} />
+                      <TextField id="street" label="Street Name" {...addressField("street")} />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <TextField id="city" label="City" value={addr.city} onChange={(e) => set("city", e.target.value)} />
-                      <TextField id="state" label="State" value={addr.state} onChange={(e) => set("state", e.target.value)} />
+                      <TextField id="city" label="City" {...addressField("city")} />
+                      <TextField id="state" label="State" {...addressField("state")} />
                     </div>
-                    <TextField id="country" label="Country" value={addr.country} onChange={(e) => set("country", e.target.value)} />
+                    <TextField id="country" label="Country" {...addressField("country")} />
                     <TextAreaField
                       id="notes"
                       label="Access Notes"
@@ -942,41 +1241,51 @@ export function ScheduleWizard({
                     />
 
                     {addressCollapsible && (
-                      <Button
-                        size="lg"
-                        className="w-full"
-                        disabled={!addrValid}
-                        onClick={() => setAddressConfirmed(true)}
-                      >
-                        Confirm address
-                        <ArrowRightIcon size={20} />
-                      </Button>
+                      <div>
+                        <Button
+                          id="address-confirm"
+                          size="lg"
+                          className="w-full scroll-mt-6"
+                          disabled={!addrValid}
+                          aria-describedby={errorFor("address-confirm") ? "address-confirm-error" : undefined}
+                          onClick={() => setAddressConfirmed(true)}
+                        >
+                          Confirm address
+                          <ArrowRightIcon size={20} />
+                        </Button>
+                        <FieldError id="address-confirm-error">{errorFor("address-confirm")}</FieldError>
+                      </div>
                     )}
                   </div>
                 </Section>
               )}
 
               <Section
+                id="equipment"
                 title="Your Equipment"
                 description="Add and select the equipment you plan to fuel."
               >
                 <div className="flex flex-col gap-4">
-                  {equipments.length === 0 ? (
-                    <button
-                      onClick={() => setAdding(true)}
-                      className="flex items-center justify-center gap-2 rounded-2xl bg-grey-500/8 py-6 text-sm font-semibold text-text-secondary transition-colors hover:bg-grey-500/16"
-                    >
-                      Add an equipment
-                      <PlusIcon size={18} />
-                    </button>
-                  ) : (
-                    <>
+                  <ChoiceGroup id="equipment-options" labelledBy="equipment-title" error={errorFor("equipment")}>
+                    {equipments.length === 0 ? (
+                      <button
+                        onClick={() => setAdding(true)}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-grey-500/8 py-6 text-sm font-semibold text-text-secondary transition-colors hover:bg-grey-500/16"
+                      >
+                        Add an equipment
+                        <PlusIcon size={18} />
+                      </button>
+                    ) : (
                       <EquipmentUnitPicker
                         equipments={equipments}
                         deselected={deselected}
                         onChange={setDeselected}
                         onEdit={(e) => setEditEquip(e)}
                       />
+                    )}
+                  </ChoiceGroup>
+                  {equipments.length > 0 && (
+                    <>
                       <button
                         onClick={() => setAdding(true)}
                         className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-grey-400 py-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/8"
@@ -1206,6 +1515,19 @@ export function ScheduleWizard({
               </div>
             )}
 
+            {/* Repeats what's left, for whoever scrolls back to the button. Always
+                in the page so screen readers announce it when it fills in. */}
+            <div role="status" aria-live="polite">
+              {errorCount > 0 && (
+                <p className="mt-4 flex items-start gap-2 rounded-xl bg-error/8 px-4 py-3 text-sm font-medium text-error-dark">
+                  <AlertTriangleIcon size={18} className="mt-px shrink-0" />
+                  {errorCount === 1
+                    ? "Complete the highlighted item to continue."
+                    : `Complete the ${errorCount} highlighted items to continue.`}
+                </p>
+              )}
+            </div>
+
             <div className="mt-5 flex gap-3">
               <Button variant="soft" size="lg" onClick={() => router.push(cancelHref)}>
                 Cancel
@@ -1213,9 +1535,10 @@ export function ScheduleWizard({
               <Button
                 size="lg"
                 className="flex-1"
-                disabled={!canPlace}
+                // Admin keeps the old gate; customers always get an answer (see `missing`).
+                disabled={!collectsPayment && !canPlace}
                 onClick={() =>
-                  collectsPayment ? goToStep("payment") : isGuest ? setAccountOpen(true) : finish()
+                  collectsPayment ? continueToPayment() : isGuest ? setAccountOpen(true) : finish()
                 }
               >
                 {collectsPayment ? "Continue to payment" : "Place Order"}
